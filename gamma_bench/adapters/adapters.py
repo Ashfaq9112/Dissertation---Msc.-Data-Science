@@ -1,0 +1,240 @@
+"""
+gamma_bench.adapters
+====================
+
+Every tested method is reduced to a small interface contract. The reuse-vs-
+reimplement rule is encoded structurally:
+
+  REUSE  (black box)  : run a baseline's own repo to get its native headline
+                        number, then expose its effective AllocationMap.
+  REIMPLEMENT (thin)  : the Hessian ladder L0-L4 and the Gamma-field, written
+                        to ONE allocation interface over shared LayerStats.
+
+Each method family supplies a small set of "hooks" -- the only method-specific
+code the harness needs. Everything else (LayerStats, Quantizer, GeometryProbe,
+results schema) is shared.
+
+A method may produce results by TWO paths, and reports both where relevant:
+  (a) native    : the method's own end-to-end pipeline (honest headline)
+  (b) controlled: its AllocationMap -> shared Quantizer (allocation-isolating)
+Reporting both pre-empts the "did you weaken the baselines?" objection.
+"""
+
+from __future__ import annotations
+from typing import Optional, Protocol, runtime_checkable
+import numpy as np
+
+from gamma_bench.core.structures import (
+    LayerStats, AllocationMap, Array, GeometryProbe,
+)
+
+
+# ----------------------------------------------------------------------
+# The universal adapter contract
+# ----------------------------------------------------------------------
+@runtime_checkable
+class MethodAdapter(Protocol):
+    """
+    The contract EVERY method satisfies. Hooks are intentionally minimal.
+    """
+    name: str
+    family: str          # "gamma" | "ladder" | "rotation" | "vq" | "activation"
+    strategy: str        # "reuse" | "reimplement"
+
+    # --- HOOK 1: allocation (the controlled path; required for the crux ablation)
+    def allocate(self, stats: dict[str, LayerStats], budget: float
+                 ) -> AllocationMap: ...
+
+    # --- HOOK 2: weight pre-transform (identity unless the family rotates/scales)
+    def pre_transform(self, weights: dict[str, Array]
+                      ) -> tuple[dict[str, Array], dict]: ...
+
+    # --- HOOK 3: native run (the reuse path; returns the method's own numbers)
+    #     May be None for reimplemented methods that have no separate "native".
+    def native_run(self, weights: dict[str, Array], budget: float
+                   ) -> Optional[dict[str, Array]]: ...
+
+
+# ======================================================================
+# Family: GAMMA-FIELD  (reimplement -> reuse Gamma_prac estimators)
+# ======================================================================
+class GammaFieldAdapter:
+    family = "gamma"
+    strategy = "reimplement"
+
+    def __init__(self, use_geometry_terms: bool = True, name: str = "gamma_lgeo"):
+        # use_geometry_terms=False is the geometry-term ablation (Stage 2):
+        # drops kappa_gen / lambda_CL / C(x), leaving only lambda_geo.
+        self.use_geometry_terms = use_geometry_terms
+        self.name = name
+
+    def _lambda_geo(self, st: LayerStats) -> float:
+        """Geometric-mean eigenvalue = basis-invariant volume statistic.
+        In the real system this calls the SVD-free Gamma_prac estimator."""
+        return float(np.exp(np.mean(np.log(st.spectrum()))))
+
+    def _geometry_modulation(self, st: LayerStats) -> float:
+        """Hook point for kappa_gen / lambda_CL / C(x). Stubbed to 1.0 here;
+        real Gamma_prac fills this. Ablation sets it identically to 1.0."""
+        return 1.0 if not self.use_geometry_terms else 1.0  # TODO: Gamma_prac
+
+    def allocate(self, stats, budget):
+        score = {l: self._lambda_geo(st) * self._geometry_modulation(st)
+                 for l, st in stats.items()}
+        bits = _waterfill(score, stats, budget)
+        return AllocationMap(bits, self.name, budget,
+                             meta={"geometry_terms": self.use_geometry_terms})
+
+    def pre_transform(self, weights):
+        return weights, {}                      # gamma does not rotate weights
+
+    def native_run(self, weights, budget):
+        return None                             # no separate native pipeline
+
+
+# ======================================================================
+# Family: HESSIAN LADDER L0-L4  (reimplement to ONE interface)
+# ======================================================================
+class LadderAdapter:
+    """
+    Five backends over the SAME LayerStats. Writing them as one family is what
+    turns 'Hessian baseline' from an ill-defined single point into a controlled
+    approximation axis (L0 crude -> L4 near-true).
+    """
+    family = "ladder"
+    strategy = "reimplement"
+
+    def __init__(self, rung: str):
+        assert rung in {"L0", "L1", "L2", "L3", "L4"}
+        self.rung = rung
+        self.name = f"ladder_{rung}"
+
+    def _sensitivity(self, st: LayerStats) -> float:
+        if self.rung == "L0":                       # diagonal / magnitude proxy
+            return float(np.mean(st.diag()))
+        if self.rung == "L1":                       # empirical Fisher = Sigma
+            return float(np.trace(st.sigma) / st.weight_shape[1])
+        if self.rung == "L2":                       # region-structured second-order
+            w = 1.5 if st.region == "attn" else 1.0
+            return w * float(np.trace(st.sigma) / st.weight_shape[1])
+        if self.rung == "L3":                       # K-FAC-style (stub: spectral)
+            return float(np.mean(st.spectrum()))
+        if self.rung == "L4":                       # near-true Hessian via HVP
+            return _hvp_trace_estimate(st)
+        raise ValueError(self.rung)
+
+    def allocate(self, stats, budget):
+        score = {l: self._sensitivity(st) for l, st in stats.items()}
+        bits = _waterfill(score, stats, budget)
+        return AllocationMap(bits, self.name, budget, meta={"rung": self.rung})
+
+    def pre_transform(self, weights):
+        return weights, {}
+
+    def native_run(self, weights, budget):
+        return None
+
+
+# ======================================================================
+# Family: ROTATION  (reuse Q from QuaRot/SpinQuant; allocation on top is ours)
+# ======================================================================
+class RotationAdapter:
+    """
+    HOOK: supply the published rotation Q (Hadamard / learned). We apply it via
+    pre_transform, then run an inner allocator on the rotated weights. This is
+    exactly the H4-H6 interaction experiment: does rotation absorb, complement,
+    or antagonize geometric allocation?
+    """
+    family = "rotation"
+    strategy = "reuse"
+
+    def __init__(self, q_provider, inner_allocator, name="quarot+gamma"):
+        # q_provider(layer_id) -> orthogonal matrix Q   (from the reused repo)
+        # inner_allocator: any MethodAdapter (e.g. GammaFieldAdapter)
+        self.q_provider = q_provider
+        self.inner = inner_allocator
+        self.name = name
+
+    def pre_transform(self, weights):
+        rotated, applied = {}, {}
+        for l, W in weights.items():
+            Q = self.q_provider(l)
+            rotated[l] = W @ Q
+            applied[l] = Q
+        return rotated, {"Q": applied}
+
+    def allocate(self, stats, budget):
+        # NOTE: stats here should be computed on ROTATED activations; the
+        # harness recomputes LayerStats post-transform before calling allocate.
+        amap = self.inner.allocate(stats, budget)
+        amap.method = self.name
+        amap.meta["rotation"] = True
+        return amap
+
+    def native_run(self, weights, budget):
+        # The reused repo's own end-to-end QuaRot/SpinQuant result (rotation +
+        # its own uniform quantization) -> honest baseline headline.
+        return None   # wire to reused repo CLI / API
+
+
+# ======================================================================
+# Family: REUSED PTQ (GPTQ / AWQ / APTQ) and VQ (AQLM)  -- black boxes
+# ======================================================================
+class ReusedPTQAdapter:
+    """
+    For GPTQ / AWQ / APTQ / AQLM: run the published repo (native_run) for the
+    honest headline, and -- where the method exposes one -- extract its effective
+    AllocationMap to also route through the shared Quantizer (controlled path).
+
+    HOOKS the integrator must provide per repo:
+      - extract_alloc(weights, budget) -> dict[layer_id -> bits]
+            (For AWQ: derive an effective bit/scale map. For AQLM: convert
+             codebook config to matched EFFECTIVE bits -- the fiddly adapter.)
+      - run_native(weights, budget)   -> dict[layer_id -> quantized weights]
+    """
+    family = "reused"
+    strategy = "reuse"
+
+    def __init__(self, name, extract_alloc, run_native):
+        self.name = name
+        self._extract = extract_alloc
+        self._native = run_native
+
+    def allocate(self, stats, budget):
+        bits = self._extract({l: st.weight_shape for l, st in stats.items()},
+                             budget)
+        return AllocationMap(bits, self.name, budget, meta={"reused": True})
+
+    def pre_transform(self, weights):
+        return weights, {}
+
+    def native_run(self, weights, budget):
+        return self._native(weights, budget)
+
+
+# ----------------------------------------------------------------------
+# shared helpers
+# ----------------------------------------------------------------------
+def _waterfill(score: dict[str, float], stats, budget: float) -> dict[str, float]:
+    """Monotone allocation: more bits where score (sensitivity/geometry) is high.
+    Normalized so the size-weighted average equals `budget`. Skeleton form."""
+    layers = list(score)
+    s = np.array([score[l] for l in layers], dtype=float)
+    s = np.log1p(s - s.min() + 1e-9)                 # compress dynamic range
+    w = s / (s.sum() + 1e-12)
+    raw = budget + (w - w.mean()) * budget           # spread around budget
+    bits = np.clip(raw, 2.0, 8.0)
+    return {l: float(b) for l, b in zip(layers, bits)}
+
+
+def _hvp_trace_estimate(st: LayerStats, n_probe: int = 8) -> float:
+    """Hutchinson trace estimate of the near-true Hessian via the HVP action.
+    Falls back to Sigma trace if no HVP is attached (then L4 == L1, flagged)."""
+    if st.hvp is None:
+        return float(np.trace(st.sigma) / st.weight_shape[1])
+    n = st.weight_shape[1]
+    acc = 0.0
+    for _ in range(n_probe):
+        v = np.random.choice([-1.0, 1.0], size=n)
+        acc += float(v @ st.hvp(v))
+    return acc / (n_probe * n)

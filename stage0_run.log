@@ -1,0 +1,597 @@
+nohup: ignoring input
+============================================================
+Stage 0  —  GPT-2 Small baseline reproduction
+============================================================
+
+───────────────────────────────────────────────────────  seed=0
+
+[1/4] Building LayerStats from C4 activations...
+      49 layers found.
+
+[2/4] Attaching L4 HVP...
+  [hvp] attached → transformer.h.0.attn.c_attn                         scale=25.6
+  [hvp] attached → transformer.h.0.attn.c_proj                         scale=25.6
+  [hvp] attached → transformer.h.0.mlp.c_fc                            scale=25.6
+  [hvp] attached → transformer.h.0.mlp.c_proj                          scale=25.6
+  [hvp] attached → transformer.h.1.attn.c_attn                         scale=25.6
+  [hvp] attached → transformer.h.1.attn.c_proj                         scale=25.6
+  [hvp] attached → transformer.h.1.mlp.c_fc                            scale=25.6
+  [hvp] attached → transformer.h.1.mlp.c_proj                          scale=25.6
+  [hvp] attached → transformer.h.2.attn.c_attn                         scale=25.6
+  [hvp] attached → transformer.h.2.attn.c_proj                         scale=25.6
+  [hvp] attached → transformer.h.2.mlp.c_fc                            scale=25.6
+  [hvp] attached → transformer.h.2.mlp.c_proj                          scale=25.6
+  [hvp] attached → transformer.h.3.attn.c_attn                         scale=25.6
+  [hvp] attached → transformer.h.3.attn.c_proj                         scale=25.6
+  [hvp] attached → transformer.h.3.mlp.c_fc                            scale=25.6
+  [hvp] attached → transformer.h.3.mlp.c_proj                          scale=25.6
+  [hvp] attached → transformer.h.4.attn.c_attn                         scale=25.6
+  [hvp] attached → transformer.h.4.attn.c_proj                         scale=25.6
+  [hvp] attached → transformer.h.4.mlp.c_fc                            scale=25.6
+  [hvp] attached → transformer.h.4.mlp.c_proj                          scale=25.6
+  [hvp] attached → transformer.h.5.attn.c_attn                         scale=25.6
+  [hvp] attached → transformer.h.5.attn.c_proj                         scale=25.6
+  [hvp] attached → transformer.h.5.mlp.c_fc                            scale=25.6
+  [hvp] attached → transformer.h.5.mlp.c_proj                          scale=25.6
+  [hvp] attached → transformer.h.6.attn.c_attn                         scale=25.6
+  [hvp] attached → transformer.h.6.attn.c_proj                         scale=25.6
+  [hvp] attached → transformer.h.6.mlp.c_fc                            scale=25.6
+  [hvp] attached → transformer.h.6.mlp.c_proj                          scale=25.6
+  [hvp] attached → transformer.h.7.attn.c_attn                         scale=25.6
+  [hvp] attached → transformer.h.7.attn.c_proj                         scale=25.6
+  [hvp] attached → transformer.h.7.mlp.c_fc                            scale=25.6
+  [hvp] attached → transformer.h.7.mlp.c_proj                          scale=25.6
+  [hvp] attached → transformer.h.8.attn.c_attn                         scale=25.6
+  [hvp] attached → transformer.h.8.attn.c_proj                         scale=25.6
+  [hvp] attached → transformer.h.8.mlp.c_fc                            scale=25.6
+  [hvp] attached → transformer.h.8.mlp.c_proj                          scale=25.6
+  [hvp] attached → transformer.h.9.attn.c_attn                         scale=25.6
+  [hvp] attached → transformer.h.9.attn.c_proj                         scale=25.6
+  [hvp] attached → transformer.h.9.mlp.c_fc                            scale=25.6
+  [hvp] attached → transformer.h.9.mlp.c_proj                          scale=25.6
+  [hvp] attached → transformer.h.10.attn.c_attn                        scale=25.6
+  [hvp] attached → transformer.h.10.attn.c_proj                        scale=25.6
+  [hvp] attached → transformer.h.10.mlp.c_fc                           scale=25.6
+  [hvp] attached → transformer.h.10.mlp.c_proj                         scale=25.6
+  [hvp] attached → transformer.h.11.attn.c_attn                        scale=25.6
+  [hvp] attached → transformer.h.11.attn.c_proj                        scale=25.6
+  [hvp] attached → transformer.h.11.mlp.c_fc                           scale=25.6
+  [hvp] attached → transformer.h.11.mlp.c_proj                         scale=25.6
+  [hvp] attached → lm_head                                             scale=25.6
+
+[3/4] Computing hessian gap per layer...
+`loss_type=None` was set in the config but it is unrecognised.Using the default loss: `ForCausalLMLoss`.
+  [gap] transformer.h.0.attn.c_attn                         gap=2.1082  tr(H_loss)=161.0199  tr(H_lay)=654200.39
+  [gap] transformer.h.0.attn.c_proj                         gap=0.5126  tr(H_loss)=0.0000  tr(H_lay)=1425762.99
+  [gap] transformer.h.0.mlp.c_fc                            gap=0.3672  tr(H_loss)=360.6283  tr(H_lay)=1230958.26
+  [gap] transformer.h.0.mlp.c_proj                          gap=0.9712  tr(H_loss)=0.0000  tr(H_lay)=8281843.28
+  [gap] transformer.h.1.attn.c_attn                         gap=0.4638  tr(H_loss)=293.5758  tr(H_lay)=1258831.99
+  [gap] transformer.h.1.attn.c_proj                         gap=0.3601  tr(H_loss)=0.0000  tr(H_lay)=3854941.11
+  [gap] transformer.h.1.mlp.c_fc                            gap=0.3346  tr(H_loss)=499.6565  tr(H_lay)=1581420.03
+  [gap] transformer.h.1.mlp.c_proj                          gap=0.5747  tr(H_loss)=0.0000  tr(H_lay)=5580268.04
+  [gap] transformer.h.2.attn.c_attn                         gap=0.2990  tr(H_loss)=1169.2533  tr(H_lay)=4287515.73
+  [gap] transformer.h.2.attn.c_proj                         gap=0.9512  tr(H_loss)=0.0000  tr(H_lay)=4390919.49
+  [gap] transformer.h.2.mlp.c_fc                            gap=0.1694  tr(H_loss)=2101.1506  tr(H_lay)=2431602.79
+  [gap] transformer.h.2.mlp.c_proj                          gap=1.0833  tr(H_loss)=0.0000  tr(H_lay)=8318366.37
+  [gap] transformer.h.3.attn.c_attn                         gap=0.2174  tr(H_loss)=1662.0661  tr(H_lay)=6730703.47
+  [gap] transformer.h.3.attn.c_proj                         gap=0.5103  tr(H_loss)=0.0000  tr(H_lay)=4152401.12
+  [gap] transformer.h.3.mlp.c_fc                            gap=0.1899  tr(H_loss)=1522.9934  tr(H_lay)=2682487.17
+  [gap] transformer.h.3.mlp.c_proj                          gap=1.1658  tr(H_loss)=0.0000  tr(H_lay)=5665866.04
+  [gap] transformer.h.4.attn.c_attn                         gap=0.1995  tr(H_loss)=1982.0752  tr(H_lay)=5636029.18
+  [gap] transformer.h.4.attn.c_proj                         gap=0.6104  tr(H_loss)=0.0000  tr(H_lay)=3097839.37
+  [gap] transformer.h.4.mlp.c_fc                            gap=0.3055  tr(H_loss)=2715.8298  tr(H_lay)=2522123.01
+  [gap] transformer.h.4.mlp.c_proj                          gap=0.4541  tr(H_loss)=0.0000  tr(H_lay)=5855646.52
+  [gap] transformer.h.5.attn.c_attn                         gap=0.3620  tr(H_loss)=1213.9926  tr(H_lay)=8003083.68
+  [gap] transformer.h.5.attn.c_proj                         gap=0.4751  tr(H_loss)=0.0000  tr(H_lay)=3884648.83
+  [gap] transformer.h.5.mlp.c_fc                            gap=0.2574  tr(H_loss)=1549.6427  tr(H_lay)=2760632.04
+  [gap] transformer.h.5.mlp.c_proj                          gap=0.5322  tr(H_loss)=0.0000  tr(H_lay)=6887076.34
+  [gap] transformer.h.6.attn.c_attn                         gap=0.2437  tr(H_loss)=1859.6915  tr(H_lay)=6924914.47
+  [gap] transformer.h.6.attn.c_proj                         gap=0.8381  tr(H_loss)=-0.0000  tr(H_lay)=2307965.86
+  [gap] transformer.h.6.mlp.c_fc                            gap=0.2199  tr(H_loss)=2003.4023  tr(H_lay)=2481646.99
+  [gap] transformer.h.6.mlp.c_proj                          gap=1.3669  tr(H_loss)=0.0000  tr(H_lay)=7500106.06
+  [gap] transformer.h.7.attn.c_attn                         gap=0.2603  tr(H_loss)=1088.7589  tr(H_lay)=7013359.21
+  [gap] transformer.h.7.attn.c_proj                         gap=1.6240  tr(H_loss)=0.0000  tr(H_lay)=2449329.51
+  [gap] transformer.h.7.mlp.c_fc                            gap=0.1238  tr(H_loss)=912.8918  tr(H_lay)=2346911.92
+  [gap] transformer.h.7.mlp.c_proj                          gap=0.9677  tr(H_loss)=0.0000  tr(H_lay)=8199154.54
+  [gap] transformer.h.8.attn.c_attn                         gap=0.2600  tr(H_loss)=1041.5196  tr(H_lay)=6336276.38
+  [gap] transformer.h.8.attn.c_proj                         gap=15.9265  tr(H_loss)=0.0000  tr(H_lay)=3280705.98
+  [gap] transformer.h.8.mlp.c_fc                            gap=0.0956  tr(H_loss)=718.5455  tr(H_lay)=2313517.55
+  [gap] transformer.h.8.mlp.c_proj                          gap=64.7074  tr(H_loss)=-0.0000  tr(H_lay)=9495489.03
+  [gap] transformer.h.9.attn.c_attn                         gap=0.6385  tr(H_loss)=295.6522  tr(H_lay)=5932832.01
+  [gap] transformer.h.9.attn.c_proj                         gap=0.9613  tr(H_loss)=0.0000  tr(H_lay)=3109779.57
+  [gap] transformer.h.9.mlp.c_fc                            gap=0.0938  tr(H_loss)=605.5125  tr(H_lay)=2294466.61
+  [gap] transformer.h.9.mlp.c_proj                          gap=2.2667  tr(H_loss)=0.0000  tr(H_lay)=10834022.77
+  [gap] transformer.h.10.attn.c_attn                        gap=0.4804  tr(H_loss)=281.6246  tr(H_lay)=5420271.59
+  [gap] transformer.h.10.attn.c_proj                        gap=4.8871  tr(H_loss)=0.0000  tr(H_lay)=4384362.85
+  [gap] transformer.h.10.mlp.c_fc                           gap=0.1084  tr(H_loss)=442.4585  tr(H_lay)=2234384.32
+  [gap] transformer.h.10.mlp.c_proj                         gap=0.9807  tr(H_loss)=-0.0000  tr(H_lay)=12350795.08
+  [gap] transformer.h.11.attn.c_attn                        gap=0.8675  tr(H_loss)=362.4072  tr(H_lay)=5216379.97
+  [gap] transformer.h.11.attn.c_proj                        gap=1.0421  tr(H_loss)=-0.0000  tr(H_lay)=10169053.13
+  [gap] transformer.h.11.mlp.c_fc                           gap=0.0975  tr(H_loss)=2688.2544  tr(H_lay)=2135395.82
+  [gap] transformer.h.11.mlp.c_proj                         gap=1.9157  tr(H_loss)=0.0000  tr(H_lay)=18457685.28
+  [gap] lm_head                                             gap=0.0455  tr(H_loss)=0.0897  tr(H_lay)=3514438645.69
+      Mean gap = 2.3366 +/- 9.2896
+
+[4/4] Reproducing GPTQ and AWQ...
+Token indices sequence length is longer than the specified maximum sequence length for this model (287644 > 1024). Running this sequence through the model will result in indexing errors
+      Original GPT-2 PPL (WikiText-2): 37.41
+/home/aauf1/.conda/envs/quant_eval/lib/python3.11/site-packages/auto_gptq/nn_modules/triton_utils/kernels.py:410: FutureWarning: `torch.cuda.amp.custom_fwd(args...)` is deprecated. Please use `torch.amp.custom_fwd(args..., device_type='cuda')` instead.
+  @custom_fwd
+/home/aauf1/.conda/envs/quant_eval/lib/python3.11/site-packages/auto_gptq/nn_modules/triton_utils/kernels.py:418: FutureWarning: `torch.cuda.amp.custom_bwd(args...)` is deprecated. Please use `torch.amp.custom_bwd(args..., device_type='cuda')` instead.
+  @custom_bwd
+/home/aauf1/.conda/envs/quant_eval/lib/python3.11/site-packages/auto_gptq/nn_modules/triton_utils/kernels.py:461: FutureWarning: `torch.cuda.amp.custom_fwd(args...)` is deprecated. Please use `torch.amp.custom_fwd(args..., device_type='cuda')` instead.
+  @custom_fwd(cast_inputs=torch.float16)
+CUDA extension not installed.
+CUDA extension not installed.
+/home/aauf1/.conda/envs/quant_eval/lib/python3.11/site-packages/huggingface_hub/file_download.py:949: FutureWarning: `resume_download` is deprecated and will be removed in version 1.0.0. Downloads always resume when possible. If you want to force a new download, use `force_download=True`.
+  warnings.warn(
+INFO - Start quantizing layer 1/12
+INFO - Quantizing attn.c_attn in layer 1/12...
+INFO - Quantizing attn.c_proj in layer 1/12...
+INFO - Quantizing mlp.c_fc in layer 1/12...
+INFO - Quantizing mlp.c_proj in layer 1/12...
+INFO - Start quantizing layer 2/12
+INFO - Quantizing attn.c_attn in layer 2/12...
+INFO - Quantizing attn.c_proj in layer 2/12...
+INFO - Quantizing mlp.c_fc in layer 2/12...
+INFO - Quantizing mlp.c_proj in layer 2/12...
+INFO - Start quantizing layer 3/12
+INFO - Quantizing attn.c_attn in layer 3/12...
+INFO - Quantizing attn.c_proj in layer 3/12...
+INFO - Quantizing mlp.c_fc in layer 3/12...
+INFO - Quantizing mlp.c_proj in layer 3/12...
+INFO - Start quantizing layer 4/12
+INFO - Quantizing attn.c_attn in layer 4/12...
+INFO - Quantizing attn.c_proj in layer 4/12...
+INFO - Quantizing mlp.c_fc in layer 4/12...
+INFO - Quantizing mlp.c_proj in layer 4/12...
+INFO - Start quantizing layer 5/12
+INFO - Quantizing attn.c_attn in layer 5/12...
+INFO - Quantizing attn.c_proj in layer 5/12...
+INFO - Quantizing mlp.c_fc in layer 5/12...
+INFO - Quantizing mlp.c_proj in layer 5/12...
+INFO - Start quantizing layer 6/12
+INFO - Quantizing attn.c_attn in layer 6/12...
+INFO - Quantizing attn.c_proj in layer 6/12...
+INFO - Quantizing mlp.c_fc in layer 6/12...
+INFO - Quantizing mlp.c_proj in layer 6/12...
+INFO - Start quantizing layer 7/12
+INFO - Quantizing attn.c_attn in layer 7/12...
+INFO - Quantizing attn.c_proj in layer 7/12...
+INFO - Quantizing mlp.c_fc in layer 7/12...
+INFO - Quantizing mlp.c_proj in layer 7/12...
+INFO - Start quantizing layer 8/12
+INFO - Quantizing attn.c_attn in layer 8/12...
+INFO - Quantizing attn.c_proj in layer 8/12...
+INFO - Quantizing mlp.c_fc in layer 8/12...
+INFO - Quantizing mlp.c_proj in layer 8/12...
+INFO - Start quantizing layer 9/12
+INFO - Quantizing attn.c_attn in layer 9/12...
+INFO - Quantizing attn.c_proj in layer 9/12...
+INFO - Quantizing mlp.c_fc in layer 9/12...
+INFO - Quantizing mlp.c_proj in layer 9/12...
+INFO - Start quantizing layer 10/12
+INFO - Quantizing attn.c_attn in layer 10/12...
+INFO - Quantizing attn.c_proj in layer 10/12...
+INFO - Quantizing mlp.c_fc in layer 10/12...
+INFO - Quantizing mlp.c_proj in layer 10/12...
+INFO - Start quantizing layer 11/12
+INFO - Quantizing attn.c_attn in layer 11/12...
+INFO - Quantizing attn.c_proj in layer 11/12...
+INFO - Quantizing mlp.c_fc in layer 11/12...
+INFO - Quantizing mlp.c_proj in layer 11/12...
+INFO - Start quantizing layer 12/12
+INFO - Quantizing attn.c_attn in layer 12/12...
+INFO - Quantizing attn.c_proj in layer 12/12...
+INFO - Quantizing mlp.c_fc in layer 12/12...
+INFO - Quantizing mlp.c_proj in layer 12/12...
+Token indices sequence length is longer than the specified maximum sequence length for this model (287644 > 1024). Running this sequence through the model will result in indexing errors
+  [GPTQ] PPL = 40.77
+WARNING - you are using save_pretrained, which will re-direct to save_quantized.
+WARNING - Exllamav2 kernel is not installed, reset disable_exllamav2 to True. This may because you installed auto_gptq using a pre-build wheel on Windows, in which exllama_kernels are not compiled. To use exllama_kernels to further speedup inference, you can re-install auto_gptq from source.
+WARNING - CUDA kernels for auto_gptq are not installed, this will result in very slow inference speed. This may because:
+1. You disabled CUDA extensions compilation by setting BUILD_CUDA_EXT=0 when install auto_gptq from source.
+2. You are using pytorch without CUDA support.
+3. CUDA and nvcc are not installed in your device.
+WARNING - ignoring unknown parameter in quantize_config.json: quant_method.
+INFO - The layer lm_head is not quantized.
+Checkpoint saved to /home/aauf1/gamma_bench/stage0/../results/stage0/checkpoints/seed0
+Calling measure_geometry
+Entering output activation
+Completed Activation output
+Entering output activation
+Completed Activation output
+  CKA mean: 0.9807  kNN mean: 0.6994
+Running RunRecord
+  Record written: PPL=40.77
+
+───────────────────────────────────────────────────────  seed=1
+
+[1/4] Building LayerStats from C4 activations...
+      49 layers found.
+
+[2/4] Attaching L4 HVP...
+  [hvp] attached → transformer.h.0.attn.c_attn                         scale=25.6
+  [hvp] attached → transformer.h.0.attn.c_proj                         scale=25.6
+  [hvp] attached → transformer.h.0.mlp.c_fc                            scale=25.6
+  [hvp] attached → transformer.h.0.mlp.c_proj                          scale=25.6
+  [hvp] attached → transformer.h.1.attn.c_attn                         scale=25.6
+  [hvp] attached → transformer.h.1.attn.c_proj                         scale=25.6
+  [hvp] attached → transformer.h.1.mlp.c_fc                            scale=25.6
+  [hvp] attached → transformer.h.1.mlp.c_proj                          scale=25.6
+  [hvp] attached → transformer.h.2.attn.c_attn                         scale=25.6
+  [hvp] attached → transformer.h.2.attn.c_proj                         scale=25.6
+  [hvp] attached → transformer.h.2.mlp.c_fc                            scale=25.6
+  [hvp] attached → transformer.h.2.mlp.c_proj                          scale=25.6
+  [hvp] attached → transformer.h.3.attn.c_attn                         scale=25.6
+  [hvp] attached → transformer.h.3.attn.c_proj                         scale=25.6
+  [hvp] attached → transformer.h.3.mlp.c_fc                            scale=25.6
+  [hvp] attached → transformer.h.3.mlp.c_proj                          scale=25.6
+  [hvp] attached → transformer.h.4.attn.c_attn                         scale=25.6
+  [hvp] attached → transformer.h.4.attn.c_proj                         scale=25.6
+  [hvp] attached → transformer.h.4.mlp.c_fc                            scale=25.6
+  [hvp] attached → transformer.h.4.mlp.c_proj                          scale=25.6
+  [hvp] attached → transformer.h.5.attn.c_attn                         scale=25.6
+  [hvp] attached → transformer.h.5.attn.c_proj                         scale=25.6
+  [hvp] attached → transformer.h.5.mlp.c_fc                            scale=25.6
+  [hvp] attached → transformer.h.5.mlp.c_proj                          scale=25.6
+  [hvp] attached → transformer.h.6.attn.c_attn                         scale=25.6
+  [hvp] attached → transformer.h.6.attn.c_proj                         scale=25.6
+  [hvp] attached → transformer.h.6.mlp.c_fc                            scale=25.6
+  [hvp] attached → transformer.h.6.mlp.c_proj                          scale=25.6
+  [hvp] attached → transformer.h.7.attn.c_attn                         scale=25.6
+  [hvp] attached → transformer.h.7.attn.c_proj                         scale=25.6
+  [hvp] attached → transformer.h.7.mlp.c_fc                            scale=25.6
+  [hvp] attached → transformer.h.7.mlp.c_proj                          scale=25.6
+  [hvp] attached → transformer.h.8.attn.c_attn                         scale=25.6
+  [hvp] attached → transformer.h.8.attn.c_proj                         scale=25.6
+  [hvp] attached → transformer.h.8.mlp.c_fc                            scale=25.6
+  [hvp] attached → transformer.h.8.mlp.c_proj                          scale=25.6
+  [hvp] attached → transformer.h.9.attn.c_attn                         scale=25.6
+  [hvp] attached → transformer.h.9.attn.c_proj                         scale=25.6
+  [hvp] attached → transformer.h.9.mlp.c_fc                            scale=25.6
+  [hvp] attached → transformer.h.9.mlp.c_proj                          scale=25.6
+  [hvp] attached → transformer.h.10.attn.c_attn                        scale=25.6
+  [hvp] attached → transformer.h.10.attn.c_proj                        scale=25.6
+  [hvp] attached → transformer.h.10.mlp.c_fc                           scale=25.6
+  [hvp] attached → transformer.h.10.mlp.c_proj                         scale=25.6
+  [hvp] attached → transformer.h.11.attn.c_attn                        scale=25.6
+  [hvp] attached → transformer.h.11.attn.c_proj                        scale=25.6
+  [hvp] attached → transformer.h.11.mlp.c_fc                           scale=25.6
+  [hvp] attached → transformer.h.11.mlp.c_proj                         scale=25.6
+  [hvp] attached → lm_head                                             scale=25.6
+
+[3/4] Computing hessian gap per layer...
+  [gap] transformer.h.0.attn.c_attn                         gap=0.9302  tr(H_loss)=581.0086  tr(H_lay)=634486.24
+  [gap] transformer.h.0.attn.c_proj                         gap=0.5205  tr(H_loss)=0.0000  tr(H_lay)=1355144.95
+  [gap] transformer.h.0.mlp.c_fc                            gap=0.1621  tr(H_loss)=316.4913  tr(H_lay)=1163533.49
+  [gap] transformer.h.0.mlp.c_proj                          gap=0.7712  tr(H_loss)=0.0000  tr(H_lay)=8364164.81
+  [gap] transformer.h.1.attn.c_attn                         gap=0.4203  tr(H_loss)=473.4686  tr(H_lay)=1844335.19
+  [gap] transformer.h.1.attn.c_proj                         gap=0.6191  tr(H_loss)=0.0000  tr(H_lay)=3892086.93
+  [gap] transformer.h.1.mlp.c_fc                            gap=0.2263  tr(H_loss)=915.9157  tr(H_lay)=1779510.14
+  [gap] transformer.h.1.mlp.c_proj                          gap=0.4253  tr(H_loss)=0.0000  tr(H_lay)=5500211.31
+  [gap] transformer.h.2.attn.c_attn                         gap=0.2593  tr(H_loss)=924.0058  tr(H_lay)=5483081.26
+  [gap] transformer.h.2.attn.c_proj                         gap=1.7927  tr(H_loss)=0.0000  tr(H_lay)=3585999.19
+  [gap] transformer.h.2.mlp.c_fc                            gap=0.1630  tr(H_loss)=1818.3594  tr(H_lay)=2375083.31
+  [gap] transformer.h.2.mlp.c_proj                          gap=13.2107  tr(H_loss)=0.0000  tr(H_lay)=8448681.27
+  [gap] transformer.h.3.attn.c_attn                         gap=0.2259  tr(H_loss)=2342.0934  tr(H_lay)=8016982.45
+  [gap] transformer.h.3.attn.c_proj                         gap=1.1260  tr(H_loss)=0.0000  tr(H_lay)=3001121.15
+  [gap] transformer.h.3.mlp.c_fc                            gap=0.2882  tr(H_loss)=931.6604  tr(H_lay)=2559813.06
+  [gap] transformer.h.3.mlp.c_proj                          gap=0.4773  tr(H_loss)=0.0000  tr(H_lay)=5532314.66
+  [gap] transformer.h.4.attn.c_attn                         gap=0.1703  tr(H_loss)=1373.7387  tr(H_lay)=6462066.15
+  [gap] transformer.h.4.attn.c_proj                         gap=0.9086  tr(H_loss)=0.0000  tr(H_lay)=2843449.91
+  [gap] transformer.h.4.mlp.c_fc                            gap=0.4063  tr(H_loss)=2110.9728  tr(H_lay)=2410178.16
+  [gap] transformer.h.4.mlp.c_proj                          gap=0.5638  tr(H_loss)=0.0000  tr(H_lay)=5923497.79
+  [gap] transformer.h.5.attn.c_attn                         gap=0.4195  tr(H_loss)=1061.9707  tr(H_lay)=8351433.78
+  [gap] transformer.h.5.attn.c_proj                         gap=0.3469  tr(H_loss)=0.0000  tr(H_lay)=3466409.12
+  [gap] transformer.h.5.mlp.c_fc                            gap=0.2177  tr(H_loss)=1978.1397  tr(H_lay)=2655451.06
+  [gap] transformer.h.5.mlp.c_proj                          gap=0.5978  tr(H_loss)=0.0000  tr(H_lay)=6653563.87
+  [gap] transformer.h.6.attn.c_attn                         gap=0.1931  tr(H_loss)=2342.6896  tr(H_lay)=7474935.40
+  [gap] transformer.h.6.attn.c_proj                         gap=47.4700  tr(H_loss)=-0.0000  tr(H_lay)=2397329.29
+  [gap] transformer.h.6.mlp.c_fc                            gap=0.1724  tr(H_loss)=1906.6407  tr(H_lay)=2303463.30
+  [gap] transformer.h.6.mlp.c_proj                          gap=1.6574  tr(H_loss)=-0.0000  tr(H_lay)=7910382.62
+  [gap] transformer.h.7.attn.c_attn                         gap=0.2530  tr(H_loss)=1101.0706  tr(H_lay)=7454541.88
+  [gap] transformer.h.7.attn.c_proj                         gap=1.8328  tr(H_loss)=0.0000  tr(H_lay)=2474100.40
+  [gap] transformer.h.7.mlp.c_fc                            gap=0.1194  tr(H_loss)=827.8338  tr(H_lay)=2141950.81
+  [gap] transformer.h.7.mlp.c_proj                          gap=1.9405  tr(H_loss)=0.0000  tr(H_lay)=7539290.79
+  [gap] transformer.h.8.attn.c_attn                         gap=0.2684  tr(H_loss)=1086.0884  tr(H_lay)=6514917.37
+  [gap] transformer.h.8.attn.c_proj                         gap=1.1239  tr(H_loss)=0.0000  tr(H_lay)=3085651.88
+  [gap] transformer.h.8.mlp.c_fc                            gap=0.1348  tr(H_loss)=575.9501  tr(H_lay)=2114604.77
+  [gap] transformer.h.8.mlp.c_proj                          gap=11.9502  tr(H_loss)=0.0000  tr(H_lay)=9067689.09
+  [gap] transformer.h.9.attn.c_attn                         gap=0.5939  tr(H_loss)=353.9421  tr(H_lay)=5825916.11
+  [gap] transformer.h.9.attn.c_proj                         gap=7.5853  tr(H_loss)=0.0000  tr(H_lay)=3069415.37
+  [gap] transformer.h.9.mlp.c_fc                            gap=0.1144  tr(H_loss)=542.6239  tr(H_lay)=2138222.28
+  [gap] transformer.h.9.mlp.c_proj                          gap=5.3304  tr(H_loss)=0.0000  tr(H_lay)=11054253.41
+  [gap] transformer.h.10.attn.c_attn                        gap=0.3440  tr(H_loss)=414.1325  tr(H_lay)=5136460.08
+  [gap] transformer.h.10.attn.c_proj                        gap=6.9975  tr(H_loss)=-0.0000  tr(H_lay)=4873841.59
+  [gap] transformer.h.10.mlp.c_fc                           gap=0.1107  tr(H_loss)=469.1650  tr(H_lay)=2129072.78
+  [gap] transformer.h.10.mlp.c_proj                         gap=0.6589  tr(H_loss)=-0.0000  tr(H_lay)=12779810.32
+  [gap] transformer.h.11.attn.c_attn                        gap=0.7202  tr(H_loss)=505.5684  tr(H_lay)=4891622.94
+  [gap] transformer.h.11.attn.c_proj                        gap=0.7816  tr(H_loss)=-0.0000  tr(H_lay)=14335253.06
+  [gap] transformer.h.11.mlp.c_fc                           gap=0.0866  tr(H_loss)=2391.5880  tr(H_lay)=2182019.17
+  [gap] transformer.h.11.mlp.c_proj                         gap=0.7273  tr(H_loss)=0.0000  tr(H_lay)=19088601.60
+  [gap] lm_head                                             gap=0.0463  tr(H_loss)=0.0931  tr(H_lay)=3630386385.25
+      Mean gap = 2.3768 +/- 7.0744
+
+[4/4] Reproducing GPTQ and AWQ...
+Token indices sequence length is longer than the specified maximum sequence length for this model (287644 > 1024). Running this sequence through the model will result in indexing errors
+      Original GPT-2 PPL (WikiText-2): 37.41
+/home/aauf1/.conda/envs/quant_eval/lib/python3.11/site-packages/huggingface_hub/file_download.py:949: FutureWarning: `resume_download` is deprecated and will be removed in version 1.0.0. Downloads always resume when possible. If you want to force a new download, use `force_download=True`.
+  warnings.warn(
+INFO - Start quantizing layer 1/12
+INFO - Quantizing attn.c_attn in layer 1/12...
+INFO - Quantizing attn.c_proj in layer 1/12...
+INFO - Quantizing mlp.c_fc in layer 1/12...
+INFO - Quantizing mlp.c_proj in layer 1/12...
+INFO - Start quantizing layer 2/12
+INFO - Quantizing attn.c_attn in layer 2/12...
+INFO - Quantizing attn.c_proj in layer 2/12...
+INFO - Quantizing mlp.c_fc in layer 2/12...
+INFO - Quantizing mlp.c_proj in layer 2/12...
+INFO - Start quantizing layer 3/12
+INFO - Quantizing attn.c_attn in layer 3/12...
+INFO - Quantizing attn.c_proj in layer 3/12...
+INFO - Quantizing mlp.c_fc in layer 3/12...
+INFO - Quantizing mlp.c_proj in layer 3/12...
+INFO - Start quantizing layer 4/12
+INFO - Quantizing attn.c_attn in layer 4/12...
+INFO - Quantizing attn.c_proj in layer 4/12...
+INFO - Quantizing mlp.c_fc in layer 4/12...
+INFO - Quantizing mlp.c_proj in layer 4/12...
+INFO - Start quantizing layer 5/12
+INFO - Quantizing attn.c_attn in layer 5/12...
+INFO - Quantizing attn.c_proj in layer 5/12...
+INFO - Quantizing mlp.c_fc in layer 5/12...
+INFO - Quantizing mlp.c_proj in layer 5/12...
+INFO - Start quantizing layer 6/12
+INFO - Quantizing attn.c_attn in layer 6/12...
+INFO - Quantizing attn.c_proj in layer 6/12...
+INFO - Quantizing mlp.c_fc in layer 6/12...
+INFO - Quantizing mlp.c_proj in layer 6/12...
+INFO - Start quantizing layer 7/12
+INFO - Quantizing attn.c_attn in layer 7/12...
+INFO - Quantizing attn.c_proj in layer 7/12...
+INFO - Quantizing mlp.c_fc in layer 7/12...
+INFO - Quantizing mlp.c_proj in layer 7/12...
+INFO - Start quantizing layer 8/12
+INFO - Quantizing attn.c_attn in layer 8/12...
+INFO - Quantizing attn.c_proj in layer 8/12...
+INFO - Quantizing mlp.c_fc in layer 8/12...
+INFO - Quantizing mlp.c_proj in layer 8/12...
+INFO - Start quantizing layer 9/12
+INFO - Quantizing attn.c_attn in layer 9/12...
+INFO - Quantizing attn.c_proj in layer 9/12...
+INFO - Quantizing mlp.c_fc in layer 9/12...
+INFO - Quantizing mlp.c_proj in layer 9/12...
+INFO - Start quantizing layer 10/12
+INFO - Quantizing attn.c_attn in layer 10/12...
+INFO - Quantizing attn.c_proj in layer 10/12...
+INFO - Quantizing mlp.c_fc in layer 10/12...
+INFO - Quantizing mlp.c_proj in layer 10/12...
+INFO - Start quantizing layer 11/12
+INFO - Quantizing attn.c_attn in layer 11/12...
+INFO - Quantizing attn.c_proj in layer 11/12...
+INFO - Quantizing mlp.c_fc in layer 11/12...
+INFO - Quantizing mlp.c_proj in layer 11/12...
+INFO - Start quantizing layer 12/12
+INFO - Quantizing attn.c_attn in layer 12/12...
+INFO - Quantizing attn.c_proj in layer 12/12...
+INFO - Quantizing mlp.c_fc in layer 12/12...
+INFO - Quantizing mlp.c_proj in layer 12/12...
+Token indices sequence length is longer than the specified maximum sequence length for this model (287644 > 1024). Running this sequence through the model will result in indexing errors
+  [GPTQ] PPL = 40.32
+WARNING - you are using save_pretrained, which will re-direct to save_quantized.
+WARNING - Exllamav2 kernel is not installed, reset disable_exllamav2 to True. This may because you installed auto_gptq using a pre-build wheel on Windows, in which exllama_kernels are not compiled. To use exllama_kernels to further speedup inference, you can re-install auto_gptq from source.
+WARNING - CUDA kernels for auto_gptq are not installed, this will result in very slow inference speed. This may because:
+1. You disabled CUDA extensions compilation by setting BUILD_CUDA_EXT=0 when install auto_gptq from source.
+2. You are using pytorch without CUDA support.
+3. CUDA and nvcc are not installed in your device.
+WARNING - ignoring unknown parameter in quantize_config.json: quant_method.
+INFO - The layer lm_head is not quantized.
+Checkpoint saved to /home/aauf1/gamma_bench/stage0/../results/stage0/checkpoints/seed1
+Calling measure_geometry
+Entering output activation
+Completed Activation output
+Entering output activation
+Completed Activation output
+  CKA mean: 0.9800  kNN mean: 0.6992
+Running RunRecord
+  Record written: PPL=40.32
+
+───────────────────────────────────────────────────────  seed=2
+
+[1/4] Building LayerStats from C4 activations...
+      49 layers found.
+
+[2/4] Attaching L4 HVP...
+  [hvp] attached → transformer.h.0.attn.c_attn                         scale=25.6
+  [hvp] attached → transformer.h.0.attn.c_proj                         scale=25.6
+  [hvp] attached → transformer.h.0.mlp.c_fc                            scale=25.6
+  [hvp] attached → transformer.h.0.mlp.c_proj                          scale=25.6
+  [hvp] attached → transformer.h.1.attn.c_attn                         scale=25.6
+  [hvp] attached → transformer.h.1.attn.c_proj                         scale=25.6
+  [hvp] attached → transformer.h.1.mlp.c_fc                            scale=25.6
+  [hvp] attached → transformer.h.1.mlp.c_proj                          scale=25.6
+  [hvp] attached → transformer.h.2.attn.c_attn                         scale=25.6
+  [hvp] attached → transformer.h.2.attn.c_proj                         scale=25.6
+  [hvp] attached → transformer.h.2.mlp.c_fc                            scale=25.6
+  [hvp] attached → transformer.h.2.mlp.c_proj                          scale=25.6
+  [hvp] attached → transformer.h.3.attn.c_attn                         scale=25.6
+  [hvp] attached → transformer.h.3.attn.c_proj                         scale=25.6
+  [hvp] attached → transformer.h.3.mlp.c_fc                            scale=25.6
+  [hvp] attached → transformer.h.3.mlp.c_proj                          scale=25.6
+  [hvp] attached → transformer.h.4.attn.c_attn                         scale=25.6
+  [hvp] attached → transformer.h.4.attn.c_proj                         scale=25.6
+  [hvp] attached → transformer.h.4.mlp.c_fc                            scale=25.6
+  [hvp] attached → transformer.h.4.mlp.c_proj                          scale=25.6
+  [hvp] attached → transformer.h.5.attn.c_attn                         scale=25.6
+  [hvp] attached → transformer.h.5.attn.c_proj                         scale=25.6
+  [hvp] attached → transformer.h.5.mlp.c_fc                            scale=25.6
+  [hvp] attached → transformer.h.5.mlp.c_proj                          scale=25.6
+  [hvp] attached → transformer.h.6.attn.c_attn                         scale=25.6
+  [hvp] attached → transformer.h.6.attn.c_proj                         scale=25.6
+  [hvp] attached → transformer.h.6.mlp.c_fc                            scale=25.6
+  [hvp] attached → transformer.h.6.mlp.c_proj                          scale=25.6
+  [hvp] attached → transformer.h.7.attn.c_attn                         scale=25.6
+  [hvp] attached → transformer.h.7.attn.c_proj                         scale=25.6
+  [hvp] attached → transformer.h.7.mlp.c_fc                            scale=25.6
+  [hvp] attached → transformer.h.7.mlp.c_proj                          scale=25.6
+  [hvp] attached → transformer.h.8.attn.c_attn                         scale=25.6
+  [hvp] attached → transformer.h.8.attn.c_proj                         scale=25.6
+  [hvp] attached → transformer.h.8.mlp.c_fc                            scale=25.6
+  [hvp] attached → transformer.h.8.mlp.c_proj                          scale=25.6
+  [hvp] attached → transformer.h.9.attn.c_attn                         scale=25.6
+  [hvp] attached → transformer.h.9.attn.c_proj                         scale=25.6
+  [hvp] attached → transformer.h.9.mlp.c_fc                            scale=25.6
+  [hvp] attached → transformer.h.9.mlp.c_proj                          scale=25.6
+  [hvp] attached → transformer.h.10.attn.c_attn                        scale=25.6
+  [hvp] attached → transformer.h.10.attn.c_proj                        scale=25.6
+  [hvp] attached → transformer.h.10.mlp.c_fc                           scale=25.6
+  [hvp] attached → transformer.h.10.mlp.c_proj                         scale=25.6
+  [hvp] attached → transformer.h.11.attn.c_attn                        scale=25.6
+  [hvp] attached → transformer.h.11.attn.c_proj                        scale=25.6
+  [hvp] attached → transformer.h.11.mlp.c_fc                           scale=25.6
+  [hvp] attached → transformer.h.11.mlp.c_proj                         scale=25.6
+  [hvp] attached → lm_head                                             scale=25.6
+
+[3/4] Computing hessian gap per layer...
+  [gap] transformer.h.0.attn.c_attn                         gap=24.9275  tr(H_loss)=-20.3450  tr(H_lay)=637758.22
+  [gap] transformer.h.0.attn.c_proj                         gap=0.4228  tr(H_loss)=0.0000  tr(H_lay)=1216032.03
+  [gap] transformer.h.0.mlp.c_fc                            gap=0.2025  tr(H_loss)=322.6607  tr(H_lay)=1175352.55
+  [gap] transformer.h.0.mlp.c_proj                          gap=0.5036  tr(H_loss)=0.0000  tr(H_lay)=8679769.18
+  [gap] transformer.h.1.attn.c_attn                         gap=0.5567  tr(H_loss)=234.2758  tr(H_lay)=1669396.29
+  [gap] transformer.h.1.attn.c_proj                         gap=0.5786  tr(H_loss)=0.0000  tr(H_lay)=4340978.87
+  [gap] transformer.h.1.mlp.c_fc                            gap=0.3379  tr(H_loss)=586.2396  tr(H_lay)=1776848.05
+  [gap] transformer.h.1.mlp.c_proj                          gap=0.5224  tr(H_loss)=0.0000  tr(H_lay)=5374766.23
+  [gap] transformer.h.2.attn.c_attn                         gap=0.2403  tr(H_loss)=1034.3358  tr(H_lay)=4760742.28
+  [gap] transformer.h.2.attn.c_proj                         gap=0.8172  tr(H_loss)=0.0000  tr(H_lay)=3929540.51
+  [gap] transformer.h.2.mlp.c_fc                            gap=0.1796  tr(H_loss)=1672.2905  tr(H_lay)=2374092.76
+  [gap] transformer.h.2.mlp.c_proj                          gap=2.5639  tr(H_loss)=0.0000  tr(H_lay)=9632203.70
+  [gap] transformer.h.3.attn.c_attn                         gap=0.1985  tr(H_loss)=1738.8425  tr(H_lay)=6528369.86
+  [gap] transformer.h.3.attn.c_proj                         gap=0.6484  tr(H_loss)=0.0000  tr(H_lay)=2835651.03
+  [gap] transformer.h.3.mlp.c_fc                            gap=0.1648  tr(H_loss)=1443.1033  tr(H_lay)=2522817.29
+  [gap] transformer.h.3.mlp.c_proj                          gap=0.5629  tr(H_loss)=0.0000  tr(H_lay)=5854158.34
+  [gap] transformer.h.4.attn.c_attn                         gap=0.2303  tr(H_loss)=1367.2071  tr(H_lay)=5483592.62
+  [gap] transformer.h.4.attn.c_proj                         gap=0.8588  tr(H_loss)=0.0000  tr(H_lay)=2970394.27
+  [gap] transformer.h.4.mlp.c_fc                            gap=0.2778  tr(H_loss)=3015.0220  tr(H_lay)=2386795.31
+  [gap] transformer.h.4.mlp.c_proj                          gap=0.6385  tr(H_loss)=0.0000  tr(H_lay)=6132862.22
+  [gap] transformer.h.5.attn.c_attn                         gap=0.3603  tr(H_loss)=1213.5212  tr(H_lay)=7348756.46
+  [gap] transformer.h.5.attn.c_proj                         gap=0.4851  tr(H_loss)=0.0000  tr(H_lay)=3258888.99
+  [gap] transformer.h.5.mlp.c_fc                            gap=0.2537  tr(H_loss)=1509.8412  tr(H_lay)=2556955.29
+  [gap] transformer.h.5.mlp.c_proj                          gap=0.7840  tr(H_loss)=0.0000  tr(H_lay)=6865670.90
+  [gap] transformer.h.6.attn.c_attn                         gap=0.2296  tr(H_loss)=1519.2915  tr(H_lay)=6594705.80
+  [gap] transformer.h.6.attn.c_proj                         gap=0.7054  tr(H_loss)=0.0000  tr(H_lay)=2385285.95
+  [gap] transformer.h.6.mlp.c_fc                            gap=0.1501  tr(H_loss)=1594.8553  tr(H_lay)=2281282.57
+  [gap] transformer.h.6.mlp.c_proj                          gap=0.5653  tr(H_loss)=0.0000  tr(H_lay)=7237815.02
+  [gap] transformer.h.7.attn.c_attn                         gap=0.3303  tr(H_loss)=901.7747  tr(H_lay)=6638052.97
+  [gap] transformer.h.7.attn.c_proj                         gap=0.5458  tr(H_loss)=0.0000  tr(H_lay)=2275341.02
+  [gap] transformer.h.7.mlp.c_fc                            gap=0.1357  tr(H_loss)=715.9749  tr(H_lay)=2168948.47
+  [gap] transformer.h.7.mlp.c_proj                          gap=1.0006  tr(H_loss)=0.0000  tr(H_lay)=7725966.23
+  [gap] transformer.h.8.attn.c_attn                         gap=0.3456  tr(H_loss)=780.8220  tr(H_lay)=5955639.70
+  [gap] transformer.h.8.attn.c_proj                         gap=1.0588  tr(H_loss)=0.0000  tr(H_lay)=3308601.60
+  [gap] transformer.h.8.mlp.c_fc                            gap=0.1339  tr(H_loss)=685.5970  tr(H_lay)=2107344.00
+  [gap] transformer.h.8.mlp.c_proj                          gap=8.4057  tr(H_loss)=-0.0000  tr(H_lay)=8846648.33
+  [gap] transformer.h.9.attn.c_attn                         gap=0.9014  tr(H_loss)=248.6498  tr(H_lay)=5490045.63
+  [gap] transformer.h.9.attn.c_proj                         gap=1.8457  tr(H_loss)=0.0000  tr(H_lay)=3051117.99
+  [gap] transformer.h.9.mlp.c_fc                            gap=0.1240  tr(H_loss)=491.3475  tr(H_lay)=2093325.65
+  [gap] transformer.h.9.mlp.c_proj                          gap=2.2044  tr(H_loss)=0.0000  tr(H_lay)=10123941.18
+  [gap] transformer.h.10.attn.c_attn                        gap=0.4843  tr(H_loss)=286.0331  tr(H_lay)=4981663.43
+  [gap] transformer.h.10.attn.c_proj                        gap=1.1160  tr(H_loss)=0.0000  tr(H_lay)=4669332.28
+  [gap] transformer.h.10.mlp.c_fc                           gap=0.1156  tr(H_loss)=474.0019  tr(H_lay)=2237921.54
+  [gap] transformer.h.10.mlp.c_proj                         gap=0.4801  tr(H_loss)=-0.0000  tr(H_lay)=13686810.39
+  [gap] transformer.h.11.attn.c_attn                        gap=0.7216  tr(H_loss)=382.0431  tr(H_lay)=4845274.34
+  [gap] transformer.h.11.attn.c_proj                        gap=0.9903  tr(H_loss)=-0.0000  tr(H_lay)=12379084.70
+  [gap] transformer.h.11.mlp.c_fc                           gap=0.0842  tr(H_loss)=2666.0203  tr(H_lay)=2173488.16
+  [gap] transformer.h.11.mlp.c_proj                         gap=0.6733  tr(H_loss)=0.0000  tr(H_lay)=17014541.00
+  [gap] lm_head                                             gap=0.0475  tr(H_loss)=0.1111  tr(H_lay)=4397500734.44
+      Mean gap = 1.2390 +/- 3.6285
+
+[4/4] Reproducing GPTQ and AWQ...
+Token indices sequence length is longer than the specified maximum sequence length for this model (287644 > 1024). Running this sequence through the model will result in indexing errors
+      Original GPT-2 PPL (WikiText-2): 37.41
+/home/aauf1/.conda/envs/quant_eval/lib/python3.11/site-packages/huggingface_hub/file_download.py:949: FutureWarning: `resume_download` is deprecated and will be removed in version 1.0.0. Downloads always resume when possible. If you want to force a new download, use `force_download=True`.
+  warnings.warn(
+INFO - Start quantizing layer 1/12
+INFO - Quantizing attn.c_attn in layer 1/12...
+INFO - Quantizing attn.c_proj in layer 1/12...
+INFO - Quantizing mlp.c_fc in layer 1/12...
+INFO - Quantizing mlp.c_proj in layer 1/12...
+INFO - Start quantizing layer 2/12
+INFO - Quantizing attn.c_attn in layer 2/12...
+INFO - Quantizing attn.c_proj in layer 2/12...
+INFO - Quantizing mlp.c_fc in layer 2/12...
+INFO - Quantizing mlp.c_proj in layer 2/12...
+INFO - Start quantizing layer 3/12
+INFO - Quantizing attn.c_attn in layer 3/12...
+INFO - Quantizing attn.c_proj in layer 3/12...
+INFO - Quantizing mlp.c_fc in layer 3/12...
+INFO - Quantizing mlp.c_proj in layer 3/12...
+INFO - Start quantizing layer 4/12
+INFO - Quantizing attn.c_attn in layer 4/12...
+INFO - Quantizing attn.c_proj in layer 4/12...
+INFO - Quantizing mlp.c_fc in layer 4/12...
+INFO - Quantizing mlp.c_proj in layer 4/12...
+INFO - Start quantizing layer 5/12
+INFO - Quantizing attn.c_attn in layer 5/12...
+INFO - Quantizing attn.c_proj in layer 5/12...
+INFO - Quantizing mlp.c_fc in layer 5/12...
+INFO - Quantizing mlp.c_proj in layer 5/12...
+INFO - Start quantizing layer 6/12
+INFO - Quantizing attn.c_attn in layer 6/12...
+INFO - Quantizing attn.c_proj in layer 6/12...
+INFO - Quantizing mlp.c_fc in layer 6/12...
+INFO - Quantizing mlp.c_proj in layer 6/12...
+INFO - Start quantizing layer 7/12
+INFO - Quantizing attn.c_attn in layer 7/12...
+INFO - Quantizing attn.c_proj in layer 7/12...
+INFO - Quantizing mlp.c_fc in layer 7/12...
+INFO - Quantizing mlp.c_proj in layer 7/12...
+INFO - Start quantizing layer 8/12
+INFO - Quantizing attn.c_attn in layer 8/12...
+INFO - Quantizing attn.c_proj in layer 8/12...
+INFO - Quantizing mlp.c_fc in layer 8/12...
+INFO - Quantizing mlp.c_proj in layer 8/12...
+INFO - Start quantizing layer 9/12
+INFO - Quantizing attn.c_attn in layer 9/12...
+INFO - Quantizing attn.c_proj in layer 9/12...
+INFO - Quantizing mlp.c_fc in layer 9/12...
+INFO - Quantizing mlp.c_proj in layer 9/12...
+INFO - Start quantizing layer 10/12
+INFO - Quantizing attn.c_attn in layer 10/12...
+INFO - Quantizing attn.c_proj in layer 10/12...
+INFO - Quantizing mlp.c_fc in layer 10/12...
+INFO - Quantizing mlp.c_proj in layer 10/12...
+INFO - Start quantizing layer 11/12
+INFO - Quantizing attn.c_attn in layer 11/12...
+INFO - Quantizing attn.c_proj in layer 11/12...
+INFO - Quantizing mlp.c_fc in layer 11/12...
+INFO - Quantizing mlp.c_proj in layer 11/12...
+INFO - Start quantizing layer 12/12
+INFO - Quantizing attn.c_attn in layer 12/12...
+INFO - Quantizing attn.c_proj in layer 12/12...
+INFO - Quantizing mlp.c_fc in layer 12/12...
+INFO - Quantizing mlp.c_proj in layer 12/12...
+Token indices sequence length is longer than the specified maximum sequence length for this model (287644 > 1024). Running this sequence through the model will result in indexing errors
+  [GPTQ] PPL = 40.65
+WARNING - you are using save_pretrained, which will re-direct to save_quantized.
+WARNING - Exllamav2 kernel is not installed, reset disable_exllamav2 to True. This may because you installed auto_gptq using a pre-build wheel on Windows, in which exllama_kernels are not compiled. To use exllama_kernels to further speedup inference, you can re-install auto_gptq from source.
+WARNING - CUDA kernels for auto_gptq are not installed, this will result in very slow inference speed. This may because:
+1. You disabled CUDA extensions compilation by setting BUILD_CUDA_EXT=0 when install auto_gptq from source.
+2. You are using pytorch without CUDA support.
+3. CUDA and nvcc are not installed in your device.
+WARNING - ignoring unknown parameter in quantize_config.json: quant_method.
+INFO - The layer lm_head is not quantized.
+Checkpoint saved to /home/aauf1/gamma_bench/stage0/../results/stage0/checkpoints/seed2
+Calling measure_geometry
+Entering output activation
+Completed Activation output
+Entering output activation
+Completed Activation output
+  CKA mean: 0.9786  kNN mean: 0.6913
+Running RunRecord
+  Record written: PPL=40.65
+
+Done.
+  Results  -> /home/aauf1/gamma_bench/stage0/../results/stage0/stage0_results.jsonl
+  Figures  -> /home/aauf1/gamma_bench/stage0/../results/stage0/figures/
+  Matrices -> /home/aauf1/gamma_bench/stage0/../results/stage0/matrices/

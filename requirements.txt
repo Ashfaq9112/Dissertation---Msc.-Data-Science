@@ -1,0 +1,8 @@
+numpy>=1.24.0
+pandas>=2.0.0
+matplotlib>=3.7.0
+transformers==4.51.3
+torch==2.12.1+cu126
+datasets==5.0.0
+auto_gptq==0.7.1
+

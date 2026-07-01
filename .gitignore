@@ -1,0 +1,9 @@
+results/stage0/checkpoints/
+results/stage0/matrices/
+__pycache__/
+*.pyc
+*.pth
+*.bin
+.conda/
+**/.ipynb_checkpoints/
+*.ipynb
