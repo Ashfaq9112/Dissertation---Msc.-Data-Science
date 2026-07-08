@@ -49,17 +49,21 @@ def _hutchinson_frob_sq(matvec, n_dim: int, n_probe: int = 30, seed: int = 0) ->
         acc += float(np.dot(Av, Av))
     return acc / n_probe
 
-    
+
+
 def compute_hessian_gap(
     stats:   Dict[str, LayerStats],
     n_probe: int = 30,
     seed:    int = 0,
 ) -> Tuple[Dict[str, float], Dict[str, float], Dict[str, float]]:
     """
-    For each layer with HVP attached, computes the structurally normalized gap:
-      - gap_by_layer           : ||H_loss/tr(H_loss) - H_lay/tr(H_lay)||_F
-      - trace_h_loss_by_layer  : tr(H_loss) estimated via Hutchinson
-      - trace_n_sigma_by_layer : tr(H_lay) = tr(N * Sigma) via Hutchinson
+    For each layer with HVP attached, computes the relative Frobenius
+    approximation error of Eq. 2 in the report:
+
+        gap_l = ||H_loss_l - H_lay_l||_F / ||H_lay_l||_F
+
+    where H_lay_l = N * Sigma_l is materialized exactly (no Hutchinson
+    needed on that side — only H_loss is matvec-only).
 
     Returns
     -------
@@ -72,33 +76,29 @@ def compute_hessian_gap(
         n = st.weight_shape[1]   # d_in
         N = st.n_tokens
 
-        # 1. Define the layer approximation MV product
-        def h_lay_mv(v):  return (st.sigma * N) @ v
-
-        # 2. Estimate trace of H_lay
-        tr_ns = _hutchinson_trace(h_lay_mv, n, n_probe, seed)
+        # H_lay = N * Sigma is already a materialized array — compute
+        # trace and Frobenius norm exactly, no Hutchinson needed here.
+        H_lay  = st.sigma * N
+        tr_ns  = float(np.trace(H_lay))
+        fro_ns = float(np.linalg.norm(H_lay, "fro"))
         tr_n_sigma[layer_id] = tr_ns
+
+        def h_lay_mv(v):  return H_lay @ v
 
         if st.hvp is None:
             gaps[layer_id]      = float('nan')
             tr_h_loss[layer_id] = float('nan')
             continue
 
-        # 3. Estimate trace of H_loss
+        # H_loss is never materialized — only matvec access exists,
+        # so trace and the numerator of the gap still need Hutchinson.
         tr_hl = _hutchinson_trace(st.hvp, n, n_probe, seed)
         tr_h_loss[layer_id] = tr_hl
 
-        # 4. Standardize scales using the estimated traces to fix the 1/M^2 mismatch
-        norm_hl = tr_hl if abs(tr_hl) > 1e-12 else 1.0
-        norm_ns = tr_ns if abs(tr_ns) > 1e-12 else 1.0
+        def diff_mv(v):  return st.hvp(v) - h_lay_mv(v)
 
-        # This structural difference operator scales both matrices to an effective trace of 1.0
-        def normalized_diff_mv(v):  
-            return (st.hvp(v) / norm_hl) - (h_lay_mv(v) / norm_ns)
-
-        # 5. Compute Frobenius norm of the normalized mismatch landscape
-        num_sq = _hutchinson_frob_sq(normalized_diff_mv, n, n_probe, seed)
-        gap    = float(np.sqrt(num_sq))
+        num_sq = _hutchinson_frob_sq(diff_mv, n, n_probe, seed)
+        gap    = float(np.sqrt(num_sq) / max(fro_ns, 1e-12))
 
         gaps[layer_id] = gap
         print(f"  [gap] {layer_id:50s}  gap={gap:.4f}  "
@@ -106,14 +106,17 @@ def compute_hessian_gap(
 
     return gaps, tr_h_loss, tr_n_sigma
 
+
+
+
 # def compute_hessian_gap(
 #     stats:   Dict[str, LayerStats],
 #     n_probe: int = 30,
 #     seed:    int = 0,
 # ) -> Tuple[Dict[str, float], Dict[str, float], Dict[str, float]]:
 #     """
-#     For each layer with HVP attached, computes:
-#       - gap_by_layer           : ||H_loss - H_lay||_F / ||H_lay||_F  (scalar per layer)
+#     For each layer with HVP attached, computes the structurally normalized gap:
+#       - gap_by_layer           : ||H_loss/tr(H_loss) - H_lay/tr(H_lay)||_F
 #       - trace_h_loss_by_layer  : tr(H_loss) estimated via Hutchinson
 #       - trace_n_sigma_by_layer : tr(H_lay) = tr(N * Sigma) via Hutchinson
 
@@ -128,9 +131,10 @@ def compute_hessian_gap(
 #         n = st.weight_shape[1]   # d_in
 #         N = st.n_tokens
 
+#         # 1. Define the layer approximation MV product
 #         def h_lay_mv(v):  return (st.sigma * N) @ v
 
-#         # trace of H_lay
+#         # 2. Estimate trace of H_lay
 #         tr_ns = _hutchinson_trace(h_lay_mv, n, n_probe, seed)
 #         tr_n_sigma[layer_id] = tr_ns
 
@@ -139,19 +143,25 @@ def compute_hessian_gap(
 #             tr_h_loss[layer_id] = float('nan')
 #             continue
 
-#         # trace of H_loss
+#         # 3. Estimate trace of H_loss
 #         tr_hl = _hutchinson_trace(st.hvp, n, n_probe, seed)
-#         tr_h_loss[layer_id] = tr_hl
 
-#         # gap = ||H_loss - H_lay||_F / ||H_lay||_F
-#         def diff_mv(v):  return st.hvp(v) - h_lay_mv(v)
+#         # 4. Standardize scales using the estimated traces to fix the 1/M^2 mismatch
+#         norm_hl = tr_hl if abs(tr_hl) > 1e-12 else 1.0
+#         norm_ns = tr_ns if abs(tr_ns) > 1e-12 else 1.0
 
-#         num_sq = _hutchinson_frob_sq(diff_mv,  n, n_probe, seed)
-#         den_sq = _hutchinson_frob_sq(h_lay_mv, n, n_probe, seed)
-#         gap    = float(np.sqrt(num_sq) / (np.sqrt(den_sq) + 1e-12))
+#         # This structural difference operator scales both matrices to an effective trace of 1.0
+#         def normalized_diff_mv(v):  
+#             return (st.hvp(v) / norm_hl) - (h_lay_mv(v) / norm_ns)
+
+#         # 5. Compute Frobenius norm of the normalized mismatch landscape
+#         num_sq = _hutchinson_frob_sq(normalized_diff_mv, n, n_probe, seed)
+#         gap    = float(np.sqrt(num_sq))
 
 #         gaps[layer_id] = gap
 #         print(f"  [gap] {layer_id:50s}  gap={gap:.4f}  "
-#               f"tr(H_loss)={tr_hl:.2f}  tr(H_lay)={tr_ns:.2f}")
+#               f"tr(H_loss)={tr_hl:.4f}  tr(H_lay)={tr_ns:.2f}")
 
 #     return gaps, tr_h_loss, tr_n_sigma
+
+
