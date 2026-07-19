@@ -60,6 +60,17 @@ class HessianLadderProbe:
     """Stage-0/1 bonus measurement: how good is H ~= Sigma on real models."""
     h_minus_sigma_norm: Optional[float] = None        # ||H - Sigma|| normalized
     rung: Optional[str] = None
+    # Cross-layer summary of stage0/gap.py::compute_hessian_gap's per-layer output.
+    # cos_theta is the scale-free PRIMARY answer to "does Sigma have the right geometry";
+    # scale_ratio/scale_ratio_N are the two rival N-factor conventions, kept side by side
+    # so the open convention question is settled empirically, not assumed (see gap.py
+    # module docstring); frac_neg_quad flags when a low cos_theta is actually just
+    # Hessian-indefinite-vs-Sigma-PSD structural mismatch rather than a real gap.
+    cos_theta_mean: Optional[float] = None
+    cos_theta_min: Optional[float] = None
+    scale_ratio_median: Optional[float] = None
+    scale_ratio_N_median: Optional[float] = None
+    frac_neg_quad_mean: Optional[float] = None
 
 
 @dataclass

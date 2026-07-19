@@ -111,14 +111,25 @@ class LadderAdapter:
 
     def _sensitivity(self, st: LayerStats) -> float:
         if self.rung == "L0":                       # diagonal / magnitude proxy
-            return float(np.mean(st.diag()))
+            # return float(np.mean(st.diag()))
+            return float(np.max(st.diag()))
         if self.rung == "L1":                       # empirical Fisher = Sigma
             return float(np.trace(st.sigma) / st.weight_shape[1])
         if self.rung == "L2":                       # region-structured second-order
             w = 1.5 if st.region == "attn" else 1.0
             return w * float(np.trace(st.sigma) / st.weight_shape[1])
-        if self.rung == "L3":                       # K-FAC-style (stub: spectral)
-            return float(np.mean(st.spectrum()))
+        # if self.rung == "L3":                       # K-FAC-style (stub: spectral)
+        #     return float(np.mean(st.spectrum()))
+        if self.rung == "L3":                       # K-FAC-style: mean_eig(A (x) G)
+            if st.trace_g is None:
+                raise ValueError(
+                    f"L3 requires trace_g on layer '{st.layer_id}', but it is None. "
+                    f"Call stage1.kfac.attach_kfac_trace(stats, model, input_ids, device) "
+                    f"on this LayerStats dict before allocating with rung L3."
+                )
+            a_score = float(np.trace(st.sigma) / st.weight_shape[1])   # mean eig(A), = L1's score
+            g_score = float(st.trace_g / st.weight_shape[0])           # mean eig(G)
+            return a_score * g_score
         if self.rung == "L4":                       # near-true Hessian via HVP
             return _hvp_trace_estimate(st)
         raise ValueError(self.rung)
@@ -215,26 +226,77 @@ class ReusedPTQAdapter:
 # ----------------------------------------------------------------------
 # shared helpers
 # ----------------------------------------------------------------------
-def _waterfill(score: dict[str, float], stats, budget: float) -> dict[str, float]:
-    """Monotone allocation: more bits where score (sensitivity/geometry) is high.
-    Normalized so the size-weighted average equals `budget`. Skeleton form."""
+# def _waterfill(score: dict[str, float], stats, budget: float) -> dict[str, float]:
+#     """Monotone allocation: more bits where score (sensitivity/geometry) is high.
+#     Normalized so the size-weighted average equals `budget`. Skeleton form."""
+#     layers = list(score)
+#     s = np.array([score[l] for l in layers], dtype=float)
+#     s = np.log1p(s - s.min() + 1e-9)                 # compress dynamic range
+#     w = s / (s.sum() + 1e-12)
+#     raw = budget + (w - w.mean()) * budget           # spread around budget
+#     bits = np.clip(raw, 2.0, 8.0)
+#     return {l: float(b) for l, b in zip(layers, bits)}
+
+def _waterfill(score: dict[str, float], stats: dict[str, dict], budget: float,
+                bmin: float = 2.0, bmax: float = 8.0,
+                max_iter: int = 50) -> dict[str, float]:
+    """Reverse water-filling bit allocation.
+
+    Minimizes size-weighted quantization distortion under the high-rate
+    approximation D_i ~ score_i * 2^(-2*R_i), subject to:
+        sum(n_i * R_i) / sum(n_i) == budget   and   bmin <= R_i <= bmax
+    `stats[l]["n_params"]` must give the parameter count for layer l —
+    adjust the key if your stats schema differs.
+    """
     layers = list(score)
-    s = np.array([score[l] for l in layers], dtype=float)
-    s = np.log1p(s - s.min() + 1e-9)                 # compress dynamic range
-    w = s / (s.sum() + 1e-12)
-    raw = budget + (w - w.mean()) * budget           # spread around budget
-    bits = np.clip(raw, 2.0, 8.0)
+    # log_s = np.log2(np.array([score[l] for l in layers], dtype=float) + 1e-12)
+    log_s = np.log2(np.clip(np.array([score[l] for l in layers], dtype=float), 1e-12, None))
+    # n = np.array([stats[l]["n_params"] for l in layers], dtype=float)
+    n = np.array([stats[l].weight_shape[0] * stats[l].weight_shape[1] for l in layers], dtype=float)
+
+    bits = np.full(len(layers), budget, dtype=float)
+    free = np.ones(len(layers), dtype=bool)
+    total_n = n.sum()
+
+    for _ in range(max_iter):
+        if not free.any():
+            break
+        committed = (n[~free] * bits[~free]).sum()
+        remaining_total = budget * total_n - committed
+
+        n_free = n[free]
+        w = n_free / n_free.sum()
+        mean_log_s = (w * log_s[free]).sum()
+        K = remaining_total / n_free.sum() - 0.5 * mean_log_s
+
+        bits[free] = K + 0.5 * log_s[free]
+
+        over = free & (bits > bmax)
+        under = free & (bits < bmin)
+        if not (over.any() or under.any()):
+            break
+        bits[over] = bmax
+        bits[under] = bmin
+        free &= ~over & ~under
+
+    bits = np.clip(bits, bmin, bmax)
     return {l: float(b) for l, b in zip(layers, bits)}
 
 
-def _hvp_trace_estimate(st: LayerStats, n_probe: int = 8) -> float:
-    """Hutchinson trace estimate of the near-true Hessian via the HVP action.
-    Falls back to Sigma trace if no HVP is attached (then L4 == L1, flagged)."""
+def _hvp_trace_estimate(st: LayerStats, n_probe: int = 50, seed: int = 0) -> float:
+    """Hutchinson trace estimate of the near-true Hessian via the HVP action,
+    rescaled to match L1's convention (unscaled trace(Sigma)/d_in)."""
     if st.hvp is None:
-        return float(np.trace(st.sigma) / st.weight_shape[1])
+        raise ValueError(
+            f"L4 requires hvp on layer '{st.layer_id}', but it is None. "
+            f"Call stage0.hvp.attach_hvp(stats, model, input_ids, device) "
+            f"on this LayerStats dict before allocating with rung L4."
+        )
     n = st.weight_shape[1]
+    rng = np.random.default_rng(seed)
     acc = 0.0
     for _ in range(n_probe):
-        v = np.random.choice([-1.0, 1.0], size=n)
+        v = rng.choice([-1.0, 1.0], size=n)
         acc += float(v @ st.hvp(v))
-    return acc / (n_probe * n)
+    raw = acc / (n_probe * n)
+    return max(raw / st.n_tokens, 1e-8)

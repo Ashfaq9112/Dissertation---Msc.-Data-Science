@@ -51,6 +51,10 @@ class LayerStats:
     hvp          : optional matrix-free Hessian-vector product action v -> H v.
                    Present only where the L4 near-true-Hessian oracle is built
                    (feasible at GPT-2 scale). None elsewhere.
+    trace_g      : optional trace(G) = E[||dL/d(layer output)||^2], the K-FAC
+                   output-gradient second moment used by L3. Present only
+                   where stage1.kfac.attach_kfac_trace has been run on this
+                   stats dict. None elsewhere.
     eig_cache    : optional cached spectrum of sigma (filled lazily by estimators)
     """
     layer_id: str
@@ -58,7 +62,10 @@ class LayerStats:
     weight_shape: tuple[int, int]
     sigma: Array
     n_tokens: int
+    weight_is_transposed: bool
+    sum_g: Optional[float] = None
     hvp: Optional[Callable[[Array], Array]] = None
+    trace_g: Optional[float] = None
     eig_cache: Optional[Array] = None
 
     def spectrum(self) -> Array:
@@ -134,15 +141,43 @@ class GeometryProbe:
     """
 
     @staticmethod
-    def linear_cka(H1: Array, H2: Array) -> float:
+    # def linear_cka(H1: Array, H2: Array) -> float:
+    #     """Layer-wise CKA between original (H1) and quantized (H2) activations.
+    #     H: (n_tokens, hidden)."""
+    #     H1 = H1 - H1.mean(0, keepdims=True)
+    #     H2 = H2 - H2.mean(0, keepdims=True)
+    #     hsic = np.linalg.norm(H2.T @ H1, 'fro') ** 2
+    #     n1 = np.linalg.norm(H1.T @ H1, 'fro')
+    #     n2 = np.linalg.norm(H2.T @ H2, 'fro')
+    #     return float(hsic / (n1 * n2 + 1e-12))
+    @staticmethod
+    def linear_cka(H1: Array, H2: Array, debiased: bool = True) -> float:
         """Layer-wise CKA between original (H1) and quantized (H2) activations.
-        H: (n_tokens, hidden)."""
+        H: (n_tokens, hidden). Debiased by default (Kornblith et al., 2019) --
+        needed whenever n_tokens < hidden_dim, which is the normal case here."""
         H1 = H1 - H1.mean(0, keepdims=True)
         H2 = H2 - H2.mean(0, keepdims=True)
-        hsic = np.linalg.norm(H2.T @ H1, 'fro') ** 2
-        n1 = np.linalg.norm(H1.T @ H1, 'fro')
-        n2 = np.linalg.norm(H2.T @ H2, 'fro')
-        return float(hsic / (n1 * n2 + 1e-12))
+    
+        dot_prod_sim = np.linalg.norm(H2.T @ H1, 'fro') ** 2
+        norm_x = np.linalg.norm(H1.T @ H1, 'fro')
+        norm_y = np.linalg.norm(H2.T @ H2, 'fro')
+    
+        if debiased:
+            n = H1.shape[0]
+            sq_rows_x = np.einsum('ij,ij->i', H1, H1)
+            sq_rows_y = np.einsum('ij,ij->i', H2, H2)
+            sq_norm_x = sq_rows_x.sum()
+            sq_norm_y = sq_rows_y.sum()
+    
+            def _debias(xty, sx, sy, snx, sny, n):
+                return (xty - n / (n - 2.) * sx.dot(sy)
+                        + snx * sny / ((n - 1) * (n - 2)))
+    
+            dot_prod_sim = _debias(dot_prod_sim, sq_rows_x, sq_rows_y, sq_norm_x, sq_norm_y, n)
+            norm_x = np.sqrt(_debias(norm_x ** 2, sq_rows_x, sq_rows_x, sq_norm_x, sq_norm_x, n))
+            norm_y = np.sqrt(_debias(norm_y ** 2, sq_rows_y, sq_rows_y, sq_norm_y, sq_norm_y, n))
+    
+        return float(dot_prod_sim / (norm_x * norm_y + 1e-12))
 
     @staticmethod
     def knn_overlap(H1: Array, H2: Array, k: int = 10) -> float:

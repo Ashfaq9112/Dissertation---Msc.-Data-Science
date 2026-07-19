@@ -121,13 +121,15 @@ def build_layer_stats(
         N     = token_count[layer_id]
         sigma = sigma_sum[layer_id] / N          # (1/N) X^T X = Sigma
         mod   = modules_dict[layer_id]
-        d_out = mod.nf if isinstance(mod, Conv1D) else mod.out_features
+        is_conv1d = isinstance(mod, Conv1D)
+        d_out = mod.nf if is_conv1d else mod.out_features
         d_in  = sigma.shape[0]
 
         stats[layer_id] = LayerStats(
             layer_id     = layer_id,
             region       = _classify_region(layer_id),
             weight_shape = (d_out, d_in),
+            weight_is_transposed = is_conv1d,
             sigma        = sigma,
             n_tokens     = N,
         )

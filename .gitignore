@@ -1,5 +1,7 @@
 results/stage0/checkpoints/
 results/stage0/matrices/
+results/stage0_initital/
+smoke_test/
 __pycache__/
 *.pyc
 *.pth
@@ -7,3 +9,8 @@ __pycache__/
 .conda/
 **/.ipynb_checkpoints/
 *.ipynb
+!stage0_analysis.ipynb
+gamma_bench.egg-info/
+backups/
+results.zip
+=*
