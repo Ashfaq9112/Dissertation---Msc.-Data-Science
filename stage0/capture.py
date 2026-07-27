@@ -90,7 +90,7 @@ def build_layer_stats(
     # accumulate input activations X per Linear layer
     sigma_sum:  Dict[str, np.ndarray] = {}
     token_count: Dict[str, int]       = {}
-    
+    print("Forward hook for Sigma")
     def make_hook(layer_id: str):
         def hook(module, inp, out):
             x = inp[0].detach().float().reshape(-1, inp[0].shape[-1]).cpu().numpy()
@@ -100,7 +100,7 @@ def build_layer_stats(
             sigma_sum[layer_id]   += x.T @ x        # running sum of X.T @ X
             token_count[layer_id] += len(x)
         return hook
-
+   
     handles = []
     for name, module in model.named_modules():
         if isinstance(module, (torch.nn.Linear, Conv1D)):
@@ -111,6 +111,37 @@ def build_layer_stats(
             model(input_ids[start : start + batch_size])
 
     for h in handles:
+        h.remove()
+
+    g_sum   = {}   # accumulate ||∂L/∂y||² per layer
+    g_count = {}    
+    print("backward hook for Sigma")
+    def make_backward_hook(layer_id):
+        def hook(module, grad_input, grad_output):
+            dy = grad_output[0].detach().float()       # (batch, seq, d_out)
+            dy = dy.reshape(-1, dy.shape[-1])           # (tokens, d_out)
+            g_sum[layer_id]   = g_sum.get(layer_id, 0.0) + (dy * dy).sum().item()
+            g_count[layer_id] = g_count.get(layer_id, 0) + dy.shape[0]
+        return hook
+    bwd_handles = []
+    for name, module in model.named_modules():
+        if isinstance(module, (torch.nn.Linear, Conv1D)):
+            bwd_handles.append(module.register_full_backward_hook(make_backward_hook(name)))
+
+    for start in range(0, n_samples, batch_size):
+        batch = input_ids[start : start + batch_size]
+        logits = model(batch).logits
+        # next-token causal LM loss
+        shift_logits = logits[:, :-1, :].contiguous()
+        shift_labels = batch[:, 1:].contiguous()
+        loss = torch.nn.functional.cross_entropy(
+            shift_logits.view(-1, shift_logits.size(-1)),
+            shift_labels.view(-1),
+        )
+        loss.backward()
+        model.zero_grad()
+
+    for h in bwd_handles:
         h.remove()
 
     # build LayerStats from accumulated X
@@ -124,6 +155,10 @@ def build_layer_stats(
         is_conv1d = isinstance(mod, Conv1D)
         d_out = mod.nf if is_conv1d else mod.out_features
         d_in  = sigma.shape[0]
+        g_bar = None
+        if layer_id in g_sum:
+            trace_g = g_sum[layer_id] / g_count[layer_id]   # (1/N) Σ ||dy||²
+            g_bar   = trace_g / d_out
 
         stats[layer_id] = LayerStats(
             layer_id     = layer_id,
@@ -132,6 +167,7 @@ def build_layer_stats(
             weight_is_transposed = is_conv1d,
             sigma        = sigma,
             n_tokens     = N,
+            g_bar        = g_bar
         )
 
     return stats, model, tokenizer, input_ids

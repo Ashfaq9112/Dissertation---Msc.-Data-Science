@@ -51,10 +51,7 @@ class LayerStats:
     hvp          : optional matrix-free Hessian-vector product action v -> H v.
                    Present only where the L4 near-true-Hessian oracle is built
                    (feasible at GPT-2 scale). None elsewhere.
-    trace_g      : optional trace(G) = E[||dL/d(layer output)||^2], the K-FAC
-                   output-gradient second moment used by L3. Present only
-                   where stage1.kfac.attach_kfac_trace has been run on this
-                   stats dict. None elsewhere.
+   
     eig_cache    : optional cached spectrum of sigma (filled lazily by estimators)
     """
     layer_id: str
@@ -63,9 +60,9 @@ class LayerStats:
     sigma: Array
     n_tokens: int
     weight_is_transposed: bool
-    sum_g: Optional[float] = None
+    
     hvp: Optional[Callable[[Array], Array]] = None
-    trace_g: Optional[float] = None
+    g_bar: Optional[float] = None
     eig_cache: Optional[Array] = None
 
     def spectrum(self) -> Array:

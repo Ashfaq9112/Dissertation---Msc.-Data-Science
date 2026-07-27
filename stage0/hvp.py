@@ -1,243 +1,330 @@
-"""
-stage0/hvp.py — Step 2 of the Stage 0 pipeline.
 
-WHAT THIS COMPUTES
-------------------
-For each layer l, the action of
-
-    M^(l) := sum_k [ H_loss^(l) ]_{kk}          (d_in x d_in)
-
-the sum of the INPUT-SPACE DIAGONAL BLOCKS of the true loss Hessian w.r.t.
-vec(W^(l)).  Derivation of why this is the right object:
-
-  Probe with V = outer(u, v), u Rademacher in R^{d_out}, v in R^{d_in}.
-  Apply the weight-space HVP, contract the output index with u, take E_u.
-  Since E[u_k u_l] = delta_kl:
-
-      E_u[ u . reshape(H vec(u v^T)) ]_i  =  sum_j [ sum_k H_{(k,i),(k,j)} ] v_j
-                                          =  (M v)_i
-
-  M is well-defined for ANY H -- no Kronecker assumption. If H = G (x) A does
-  hold, then [H]_{kk} = G_kk A and M = Tr(G) . A.  That is the link to Eq. (2).
-
-  The previous broadcast construction (V = outer(ones, v), sum over outputs)
-  targets instead  M_all = sum_{k,l} [H]_{kl} = (1'G1) . A  -- every block,
-  including cross-channel ones. 1'G1 is sign-indefinite and can nearly vanish.
-
-VEC CONVENTION (load-bearing -- do not change without re-deriving)
-------------------------------------------------------------------
-  vec = ROW-MAJOR flatten of a (d_out, d_in) matrix.
-  Under this convention  H ~ kron(G, A).  Under column-major it would be
-  kron(A, G).  The project doc's ladder table says "A (x) G" and the email
-  says "G (x) A"; both can be right under different vec conventions. This
-  module fixes row-major and states it. Resolve with the supervisor.
-
-TRANSPOSE HANDLING
-------------------
-  HF Conv1D stores weight as (d_in, d_out) -- transposed vs nn.Linear.
-  attn.c_proj is 768x768, so a wrong transpose does NOT raise; it silently
-  computes (A (x) G). Probes are ALWAYS built logical (d_out, d_in) and
-  transposed only at the point of contact with the stored parameter.
-
-TRUE HESSIAN, NOT GGN
----------------------
-  Double-backward gives the true (possibly indefinite) Hessian. This is
-  deliberate: the project doc names the Gauss-Newton reduction as source (i)
-  of Eq. (2)'s error ("exact at zero loss and approximate on the
-  non-converged models we actually quantize"). The gap is SUPPOSED to
-  contain it. Consequence: M may be indefinite while Sigma is PSD by
-  construction. Report that (see indefiniteness diagnostic) rather than
-  hiding it -- it is a finding.
-"""
 from typing import Dict, Optional
 import numpy as np
 import torch
+import os, sys
+from stage0.capture import LayerStats  # or wherever it's defined
 from transformers.pytorch_utils import Conv1D
-
-
-# ─────────────────────────────────────────────────────────────────────────
-# Part 1 — Tr(G) and 1'G1 directly. No HVP needed; one backward pass.
-# ─────────────────────────────────────────────────────────────────────────
-
-def attach_g_diagnostics(
-    stats:      Dict[str, "LayerStats"],
-    model,
-    input_ids:  torch.Tensor,
-    device:     str,
-    n_batches:  int = 10,
-    batch_size: int = 2,
-) -> None:
-    """
-    Fills stats[lid].trace_g and stats[lid].sum_g.
-
-    G is the output-gradient second moment:  G = (1/N) sum_n g_n g_n^T
-    with g_n = dL/dy_n the gradient w.r.t. the layer's OUTPUT. Therefore
-
-        Tr(G)  = (1/N) sum_n ||g_n||^2          <- correct contraction
-        1'G1   = (1/N) sum_n (1^T g_n)^2        <- what broadcasting picks up
-
-    Both are expectations of per-token scalars, so a backward hook on
-    grad_output gives them for free. No d_out x d_out matrix is ever formed
-    (c_fc would be 3072x3072 per layer).
-
-    ON LOSS SCALING: the absolute scale of both depends on whether the loss
-    is mean- or sum-reduced over tokens. We do NOT try to correct for it,
-    because the diagnostic that matters is the RATIO sum_g / trace_g, in
-    which any global scaling cancels exactly. Absolute Tr(G) is used only
-    within-layer, never compared across different loss conventions.
-    """
-    mods = dict(model.named_modules())
-    sq_norm: Dict[str, float] = {}   # sum_n ||g_n||^2
-    sq_sum:  Dict[str, float] = {}   # sum_n (1^T g_n)^2
-    counts:  Dict[str, int]   = {}
-
-    def make_hook(lid):
-        def hook(module, grad_input, grad_output):
-            g = grad_output[0].detach()                       # (B, S, d_out)
-            g = g.reshape(-1, g.shape[-1]).double()           # (n_tok, d_out)
-            sq_norm[lid] = sq_norm.get(lid, 0.0) + g.pow(2).sum().item()
-            sq_sum[lid]  = sq_sum.get(lid, 0.0) + g.sum(dim=1).pow(2).sum().item()
-            counts[lid]  = counts.get(lid, 0) + g.shape[0]
-        return hook
-
-    handles = [mods[lid].register_full_backward_hook(make_hook(lid)) for lid in stats]
-
-    model.zero_grad(set_to_none=True)
-    for b in range(n_batches):
-        ids = input_ids[b * batch_size:(b + 1) * batch_size].to(device)
-
-        logits = model(ids).logits[:, :-1, :]        # causal LM: drop last position
-        B, S, V = logits.shape
-
-        with torch.no_grad():                        # y ~ p_model(y|x), NOT the data labels
-            p = torch.softmax(logits, dim=-1).reshape(-1, V)
-            y_sampled = torch.multinomial(p, 1).squeeze(1)
-
-        loss = torch.nn.functional.cross_entropy(    # SUM, not mean
-            logits.reshape(-1, V), y_sampled, reduction='sum')
-        loss.backward()
-        model.zero_grad(set_to_none=True)
-
-    for h in handles:
-        h.remove()
-
-    for lid, s in stats.items():
-        if lid not in counts:
-            continue                      # layer never fired (e.g. skipped)
-        N = counts[lid]
-        s.trace_g = sq_norm[lid] / N
-        s.sum_g   = sq_sum[lid] / N
-
-
-# ─────────────────────────────────────────────────────────────────────────
-# Part 2 — the HVP probe: action of M = sum_k [H]_kk
-# ─────────────────────────────────────────────────────────────────────────
-
-def _make_probe_fn(model, mod, input_ids, device, n_batches, batch_size,
-                   d_out, d_in, is_transposed):
-    """
-    Returns  probe(v, rng) -> ndarray (d_in,), an UNBIASED estimate of M @ v
-    from a SINGLE Rademacher draw. Average many calls to reduce variance.
-
-    NOT a deterministic linear operator (u is redrawn each call). Do not feed
-    to Lanczos/CG, which assume linearity. Average explicitly instead.
-    """
-    W = mod.weight
-
-    def probe(v: np.ndarray, rng: np.random.Generator) -> np.ndarray:
-        v_t = torch.as_tensor(v, dtype=W.dtype, device=device)
-        u_np = rng.integers(0, 2, size=d_out).astype(np.float64) * 2.0 - 1.0
-        u_t = torch.as_tensor(u_np, dtype=W.dtype, device=device)
-
-        # probe is ALWAYS built in logical (d_out, d_in) space...
-        V_logical = torch.outer(u_t, v_t)
-        # ...and transposed only where it touches the stored parameter.
-        P = V_logical.T.contiguous() if is_transposed else V_logical
-
-        acc = torch.zeros(d_in, dtype=W.dtype, device=device)
-        for b in range(n_batches):
-            ids = input_ids[b * batch_size:(b + 1) * batch_size].to(device)
-            out = model(ids, labels=ids)                    # REAL labels — see below
-            n_tok = ids.shape[0] * (ids.shape[1] - 1)
-            loss = out.loss * n_tok                         # mean -> sum
-            g = torch.autograd.grad(loss, W, create_graph=True)[0]
-            # second backward of the scalar <g, P>  ==  H vec(P)
-            Hv = torch.autograd.grad((g * P).sum(), W, retain_graph=False)[0]
-            Hv_logical = Hv.T if is_transposed else Hv        # back to (d_out, d_in)
-            acc += u_t @ Hv_logical                           # contract output index
-        return (acc / n_batches).detach().cpu().numpy()
-
-    return probe
+from transformers import AutoTokenizer, AutoModelForCausalLM
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 def attach_hvp(
-    stats:      Dict[str, "LayerStats"],
-    model,
-    input_ids:  torch.Tensor,
-    device:     str,
-    n_batches:  int = 10,
+    stats: Dict[str, LayerStats],
+    model: AutoModelForCausalLM,
+    input_ids: torch.Tensor,
+    device: str = 'cuda',
+    n_batches: int = 20,
     batch_size: int = 2,
-) -> torch.Tensor:
+):
     """
-    Attaches stats[lid].hvp = probe(v, rng) for every quantizable layer, and
-    fills trace_g / sum_g.
-
-    RETURNS the exact token subset used, so that Sigma can be recomputed on
-    MATCHED data. This matters: comparing M (estimated on n_batches*batch_size
-    *seq_len tokens) against N*Sigma (65,536 tokens) makes sampling noise the
-    dominant term in the gap. Mismatched N is variance, not scale -- it cannot
-    be normalized away.
+    For each layer, attach a function st.hvp(v, u) -> Hv that computes
+    the Hessian-vector product via backprop, contracted over output
+    channels by Rademacher vector u.
+    
+    H ≈ G ⊗ A  (K-FAC structure)
+    
+    The hvp is computed by:
+    1. Forward pass on calibration data
+    2. Compute loss
+    3. Get gradient of loss w.r.t. layer weights (first backward)
+    4. Contract: dot the gradient with the probe direction
+    5. Second backward to get the HVP
     """
-    mods = dict(model.named_modules())
-    hvp_ids = input_ids[:n_batches * batch_size]
+    modules_dict = dict(model.named_modules())
+    
+    # Pre-select calibration batches (same data for all layers → fair)
+    cal_batches = []
+    for i in range(n_batches):
+        start = i * batch_size
+        if start + batch_size > len(input_ids):
+            break
+        cal_batches.append(input_ids[start : start + batch_size])
+    
+    for layer_id, st in stats.items():
+        mod = modules_dict[layer_id]
+        d_out, d_in = st.weight_shape
+        is_conv1d = st.weight_is_transposed
+        
+        def _make_hvp(module, layer_id, d_out, d_in, is_conv1d):
+            def hvp_fn(v_np, u_np):
+                """
+                v_np: (d_in,) input-space Rademacher probe
+                u_np: (d_out,) output-space Rademacher probe
+                Returns: (d_in,) Hessian-vector product
+                """
+                v = torch.tensor(v_np, dtype=torch.float32, device=device)
+                u = torch.tensor(u_np, dtype=torch.float32, device=device)
+                
+                acc = torch.zeros(d_in, device=device)
+                total_tokens = 0
+                
+                for batch in cal_batches:
+                    model.zero_grad()
+                    
+                    logits = model(batch).logits
+                    shift_logits = logits[:, :-1, :].contiguous()
+                    shift_labels = batch[:, 1:].contiguous()
+                    loss = torch.nn.functional.cross_entropy(
+                        shift_logits.view(-1, shift_logits.size(-1)),
+                        shift_labels.view(-1),
+                    )
+                    
+                    # W shape: Conv1D stores (d_in, d_out), Linear stores (d_out, d_in)
+                    W = module.weight  # requires_grad=True by default
+                    
+                    # First backward: get gradient of loss w.r.t. W
+                    grad_W = torch.autograd.grad(
+                        loss, W, create_graph=True
+                    )[0]  # same shape as W
+                    
+                    # Contract with probes:
+                    # For Linear: W is (d_out, d_in), grad_W is (d_out, d_in)
+                    #   We want: sum over output dim of u[j] * grad_W[j, :] dot v
+                    #   = u^T @ grad_W @ v  (but grad_W is a matrix, this gives scalar)
+                    # For Conv1D: W is (d_in, d_out), so grad_W is (d_in, d_out)
+                    
+                    if is_conv1d:
+                        # grad_W: (d_in, d_out)
+                        # scalar = v^T @ grad_W @ u
+                        scalar = torch.dot(v, grad_W @ u)
+                    else:
+                        # grad_W: (d_out, d_in)
+                        # scalar = u^T @ grad_W @ v
+                        scalar = torch.dot(u, grad_W @ v)
+                    
+                    # Second backward: d(scalar)/dW gives the HVP direction
+                    hvp_W = torch.autograd.grad(
+                        scalar, W
+                    )[0]  # same shape as W
+                    
+                    # Extract the input-dimension component
+                    # For Linear (d_out, d_in): contract output dim with u
+                    # For Conv1D (d_in, d_out): contract output dim with u
+                    if is_conv1d:
+                        # hvp_W: (d_in, d_out) → sum over d_out with u
+                        Hv = hvp_W @ u   # (d_in,)
+                    else:
+                        # hvp_W: (d_out, d_in) → sum over d_out with u
+                        Hv = u @ hvp_W   # (d_in,)
+                    
+                    n_tok = batch.shape[0] * (batch.shape[1] - 1)
+                    acc += Hv.detach() * n_tok
+                    total_tokens += n_tok
+                
+                return (acc / total_tokens).cpu().numpy()
+            
+            return hvp_fn
+        
+        st.hvp = _make_hvp(mod, layer_id, d_out, d_in, is_conv1d)
+        print(f"  HVP attached: {layer_id}")
 
-    for lid, s in stats.items():
-        if not getattr(s, 'quantizable', True):
-            continue                       # lm_head: weight-tied to wte, Eq.(2) N/A
-        mod = mods[lid]
-        d_out, d_in = s.weight_shape
-        is_t = s.weight_is_transposed
-        assert is_t == isinstance(mod, Conv1D), f"{lid}: transpose flag disagrees"
-        expect = (d_in, d_out) if is_t else (d_out, d_in)
-        assert tuple(mod.weight.shape) == expect, \
-            f"{lid}: weight {tuple(mod.weight.shape)} != {expect}"
-
-        s.hvp = _make_probe_fn(model, mod, hvp_ids, device,
-                               n_batches, batch_size, d_out, d_in, is_t)
-
-    attach_g_diagnostics(stats, model, hvp_ids, device, n_batches, batch_size)
-    return hvp_ids
 
 
-# ─────────────────────────────────────────────────────────────────────────
-# Part 3 — the diagnostic the supervisor asked for, per layer
-# ─────────────────────────────────────────────────────────────────────────
 
-def report_g_ratio(stats) -> Dict[str, float]:
-    """
-    ratio = 1'G1 / Tr(G) per layer.
 
-    Reading it:
-      ratio ~ 1        G effectively diagonal; broadcast was harmless here.
-      ratio >> 1       output channels coherent; broadcast INFLATES this layer.
-      ratio ~ 0        channels cancel; broadcast COLLAPSES this layer to
-                       near-zero sensitivity for reasons unrelated to curvature.
-      non-monotone in depth  => L4's layer ranking was tracking G's coherence,
-                               not curvature. Pins the anomaly to the projection.
 
-    Note 1'G1 <= d_out * Tr(G) by Cauchy-Schwarz, and 1'G1 >= 0 since G is PSD
-    by construction (it is a Gram matrix), so ratio is in [0, d_out].
-    """
-    print(f"\n  {'layer':42s} {'Tr(G)':>12s} {'1_G_1':>12s} {'ratio':>9s}")
-    out = {}
-    for lid in sorted(stats):
-        s = stats[lid]
-        if s.trace_g is None:
-            continue
-        r = s.sum_g / max(s.trace_g, 1e-30)
-        out[lid] = r
-        print(f"  {lid:42s} {s.trace_g:12.4e} {s.sum_g:12.4e} {r:9.3f}")
-    return out
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# def attach_g_diagnostics(
+#     stats:      Dict[str, "LayerStats"],
+#     model,
+#     input_ids:  torch.Tensor,
+#     device:     str,
+#     n_batches:  int = 10,
+#     batch_size: int = 2,
+# ) -> None:
+#     """
+#     Fills stats[lid].trace_g and stats[lid].sum_g.
+
+#     G is the output-gradient second moment:  G = (1/N) sum_n g_n g_n^T
+#     with g_n = dL/dy_n the gradient w.r.t. the layer's OUTPUT. Therefore
+
+#         Tr(G)  = (1/N) sum_n ||g_n||^2          <- correct contraction
+#         1'G1   = (1/N) sum_n (1^T g_n)^2        <- what broadcasting picks up
+
+#     Both are expectations of per-token scalars, so a backward hook on
+#     grad_output gives them for free. No d_out x d_out matrix is ever formed
+#     (c_fc would be 3072x3072 per layer).
+
+#     ON LOSS SCALING: the absolute scale of both depends on whether the loss
+#     is mean- or sum-reduced over tokens. We do NOT try to correct for it,
+#     because the diagnostic that matters is the RATIO sum_g / trace_g, in
+#     which any global scaling cancels exactly. Absolute Tr(G) is used only
+#     within-layer, never compared across different loss conventions.
+#     """
+#     mods = dict(model.named_modules())
+#     sq_norm: Dict[str, float] = {}   # sum_n ||g_n||^2
+#     sq_sum:  Dict[str, float] = {}   # sum_n (1^T g_n)^2
+#     counts:  Dict[str, int]   = {}
+
+#     def make_hook(lid):
+#         def hook(module, grad_input, grad_output):
+#             g = grad_output[0].detach()                       # (B, S, d_out)
+#             g = g.reshape(-1, g.shape[-1]).double()           # (n_tok, d_out)
+#             sq_norm[lid] = sq_norm.get(lid, 0.0) + g.pow(2).sum().item()
+#             sq_sum[lid]  = sq_sum.get(lid, 0.0) + g.sum(dim=1).pow(2).sum().item()
+#             counts[lid]  = counts.get(lid, 0) + g.shape[0]
+#         return hook
+
+#     handles = [mods[lid].register_full_backward_hook(make_hook(lid)) for lid in stats]
+
+#     model.zero_grad(set_to_none=True)
+#     for b in range(n_batches):
+#         ids = input_ids[b * batch_size:(b + 1) * batch_size].to(device)
+
+#         logits = model(ids).logits[:, :-1, :]        # causal LM: drop last position
+#         B, S, V = logits.shape
+
+#         with torch.no_grad():                        # y ~ p_model(y|x), NOT the data labels
+#             p = torch.softmax(logits, dim=-1).reshape(-1, V)
+#             y_sampled = torch.multinomial(p, 1).squeeze(1)
+
+#         loss = torch.nn.functional.cross_entropy(    # SUM, not mean
+#             logits.reshape(-1, V), y_sampled, reduction='sum')
+#         loss.backward()
+#         model.zero_grad(set_to_none=True)
+
+#     for h in handles:
+#         h.remove()
+
+#     for lid, s in stats.items():
+#         if lid not in counts:
+#             continue                      # layer never fired (e.g. skipped)
+#         N = counts[lid]
+#         s.trace_g = sq_norm[lid] / N
+#         s.sum_g   = sq_sum[lid] / N
+
+
+# # ─────────────────────────────────────────────────────────────────────────
+# # Part 2 — the HVP probe: action of M = sum_k [H]_kk
+# # ─────────────────────────────────────────────────────────────────────────
+
+# def _make_probe_fn(model, mod, input_ids, device, n_batches, batch_size,
+#                    d_out, d_in, is_transposed):
+#     """
+#     Returns  probe(v, rng) -> ndarray (d_in,), an UNBIASED estimate of M @ v
+#     from a SINGLE Rademacher draw. Average many calls to reduce variance.
+
+#     NOT a deterministic linear operator (u is redrawn each call). Do not feed
+#     to Lanczos/CG, which assume linearity. Average explicitly instead.
+#     """
+#     W = mod.weight
+
+#     def probe(v: np.ndarray, rng: np.random.Generator) -> np.ndarray:
+#         v_t = torch.as_tensor(v, dtype=W.dtype, device=device)
+#         u_np = rng.integers(0, 2, size=d_out).astype(np.float64) * 2.0 - 1.0
+#         u_t = torch.as_tensor(u_np, dtype=W.dtype, device=device)
+
+#         # probe is ALWAYS built in logical (d_out, d_in) space...
+#         V_logical = torch.outer(u_t, v_t)
+#         # ...and transposed only where it touches the stored parameter.
+#         P = V_logical.T.contiguous() if is_transposed else V_logical
+
+#         acc = torch.zeros(d_in, dtype=W.dtype, device=device)
+#         for b in range(n_batches):
+#             ids = input_ids[b * batch_size:(b + 1) * batch_size].to(device)
+#             out = model(ids, labels=ids)                    # REAL labels — see below
+#             n_tok = ids.shape[0] * (ids.shape[1] - 1)
+#             loss = out.loss * n_tok                         # mean -> sum
+#             g = torch.autograd.grad(loss, W, create_graph=True)[0]
+#             # second backward of the scalar <g, P>  ==  H vec(P)
+#             Hv = torch.autograd.grad((g * P).sum(), W, retain_graph=False)[0]
+#             Hv_logical = Hv.T if is_transposed else Hv        # back to (d_out, d_in)
+#             acc += u_t @ Hv_logical                           # contract output index
+#         return (acc / n_batches).detach().cpu().numpy()
+
+#     return probe
+
+
+# def attach_hvp(
+#     stats:      Dict[str, "LayerStats"],
+#     model,
+#     input_ids:  torch.Tensor,
+#     device:     str,
+#     n_batches:  int = 10,
+#     batch_size: int = 2,
+# ) -> torch.Tensor:
+#     """
+#     Attaches stats[lid].hvp = probe(v, rng) for every quantizable layer, and
+#     fills trace_g / sum_g.
+
+#     RETURNS the exact token subset used, so that Sigma can be recomputed on
+#     MATCHED data. This matters: comparing M (estimated on n_batches*batch_size
+#     *seq_len tokens) against N*Sigma (65,536 tokens) makes sampling noise the
+#     dominant term in the gap. Mismatched N is variance, not scale -- it cannot
+#     be normalized away.
+#     """
+#     mods = dict(model.named_modules())
+#     hvp_ids = input_ids[:n_batches * batch_size]
+
+#     for lid, s in stats.items():
+#         if not getattr(s, 'quantizable', True):
+#             continue                       # lm_head: weight-tied to wte, Eq.(2) N/A
+#         mod = mods[lid]
+#         d_out, d_in = s.weight_shape
+#         is_t = s.weight_is_transposed
+#         assert is_t == isinstance(mod, Conv1D), f"{lid}: transpose flag disagrees"
+#         expect = (d_in, d_out) if is_t else (d_out, d_in)
+#         assert tuple(mod.weight.shape) == expect, \
+#             f"{lid}: weight {tuple(mod.weight.shape)} != {expect}"
+
+#         s.hvp = _make_probe_fn(model, mod, hvp_ids, device,
+#                                n_batches, batch_size, d_out, d_in, is_t)
+
+#     attach_g_diagnostics(stats, model, hvp_ids, device, n_batches, batch_size)
+#     return hvp_ids
+
+
+# # ─────────────────────────────────────────────────────────────────────────
+# # Part 3 — the diagnostic the supervisor asked for, per layer
+# # ─────────────────────────────────────────────────────────────────────────
+
+# def report_g_ratio(stats) -> Dict[str, float]:
+#     """
+#     ratio = 1'G1 / Tr(G) per layer.
+
+#     Reading it:
+#       ratio ~ 1        G effectively diagonal; broadcast was harmless here.
+#       ratio >> 1       output channels coherent; broadcast INFLATES this layer.
+#       ratio ~ 0        channels cancel; broadcast COLLAPSES this layer to
+#                        near-zero sensitivity for reasons unrelated to curvature.
+#       non-monotone in depth  => L4's layer ranking was tracking G's coherence,
+#                                not curvature. Pins the anomaly to the projection.
+
+#     Note 1'G1 <= d_out * Tr(G) by Cauchy-Schwarz, and 1'G1 >= 0 since G is PSD
+#     by construction (it is a Gram matrix), so ratio is in [0, d_out].
+#     """
+#     print(f"\n  {'layer':42s} {'Tr(G)':>12s} {'1_G_1':>12s} {'ratio':>9s}")
+#     out = {}
+#     for lid in sorted(stats):
+#         s = stats[lid]
+#         if s.trace_g is None:
+#             continue
+#         r = s.sum_g / max(s.trace_g, 1e-30)
+#         out[lid] = r
+#         print(f"  {lid:42s} {s.trace_g:12.4e} {s.sum_g:12.4e} {r:9.3f}")
+#     return out
 
 
 

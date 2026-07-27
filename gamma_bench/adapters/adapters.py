@@ -109,33 +109,81 @@ class LadderAdapter:
         self.rung = rung
         self.name = f"ladder_{rung}"
 
-    def _sensitivity(self, st: LayerStats) -> float:
-        if self.rung == "L0":                       # diagonal / magnitude proxy
-            # return float(np.mean(st.diag()))
-            return float(np.max(st.diag()))
-        if self.rung == "L1":                       # empirical Fisher = Sigma
-            return float(np.trace(st.sigma) / st.weight_shape[1])
-        if self.rung == "L2":                       # region-structured second-order
-            w = 1.5 if st.region == "attn" else 1.0
-            return w * float(np.trace(st.sigma) / st.weight_shape[1])
-        # if self.rung == "L3":                       # K-FAC-style (stub: spectral)
-        #     return float(np.mean(st.spectrum()))
-        if self.rung == "L3":                       # K-FAC-style: mean_eig(A (x) G)
-            if st.trace_g is None:
-                raise ValueError(
-                    f"L3 requires trace_g on layer '{st.layer_id}', but it is None. "
-                    f"Call stage1.kfac.attach_kfac_trace(stats, model, input_ids, device) "
-                    f"on this LayerStats dict before allocating with rung L3."
+    # ------------------------------------------------------------------
+    # PER-COORDINATE sensitivity. Returns a length-d_in VECTOR, not a scalar.
+    #
+    # WHY VECTORS: collapsing each rung to a scalar destroys exactly what
+    # distinguishes the rungs. L0/L1/L3 all have the same TRACE -- they differ
+    # in STRUCTURE (diagonal vs full-Sigma vs Kronecker). Any trace-based
+    # summary makes them algebraically identical:
+    #     mean(diag(S)) == trace(S)/n == mean(eigvals(S))
+    # The previous scalar implementation collapsed L0 == L1 == L3 exactly, and
+    # L2 differed only by a hardcoded 1.5x region constant. See
+    # `assert_rungs_discriminate` below, which now fails loudly on collapse.
+    # ------------------------------------------------------------------
+    def _sensitivity_vec(self, st: LayerStats) -> Array:
+        S = st.sigma
+        n = S.shape[0]
+
+        if self.rung == "L0":
+            # Magnitude / diagonal proxy: per-coordinate variance ONLY.
+            # Ignores all off-diagonal (interaction) structure. This is the
+            # AWQ-style activation-scale baseline.
+            return np.clip(np.diag(S), 1e-12, None)
+
+        if self.rung == "L1":
+            # Empirical Fisher / OBS-GPTQ. The optimal-deletion sensitivity is
+            #     s_i = 1 / [S^{-1}]_ii
+            # which equals the SCHUR COMPLEMENT of coordinate i -- the residual
+            # variance of coord i after regressing out all others. This differs
+            # from L0 exactly when S has off-diagonal mass, which is the entire
+            # content of "second-order beats magnitude".
+            Sinv = np.linalg.pinv(S + 1e-10 * np.eye(n))
+            return np.clip(1.0 / np.clip(np.diag(Sinv), 1e-12, None), 1e-12, None)
+
+        if self.rung == "L2":
+            # Region/block-structured second-order: L1 computed WITHIN blocks
+            # (attention heads / FFN sub-blocks) rather than globally. Captures
+            # within-block interaction, ignores cross-block. NOT a hardcoded
+            # region multiplier -- that was a constant, not second-order structure.
+            n_blocks = 12 if st.region == "attn" else 4
+            bs = max(1, n // n_blocks)
+            out = np.empty(n)
+            for start in range(0, n, bs):
+                end = min(start + bs, n)
+                blk = S[start:end, start:end]
+                blk_inv = np.linalg.pinv(blk + 1e-10 * np.eye(end - start))
+                out[start:end] = 1.0 / np.clip(np.diag(blk_inv), 1e-12, None)
+            return np.clip(out, 1e-12, None)
+
+        if self.rung == "L3":
+            # K-FAC: H ~= G (x) A, with A = Sigma the INPUT factor and G the
+            # OUTPUT-gradient second moment. The per-coordinate input
+            # sensitivity is diag(A), MODULATED by the measured mean output
+            # curvature Tr(G)/d_out. That output-side term is information L0/L1
+            # structurally CANNOT see -- it is the real reason L3 != L1.
+            if st.g_bar is None:
+                raise RuntimeError(
+                    f"Layer {st.layer_id}: g_bar not computed. "
+                    f"Run backward pass in build_layer_stats first."
                 )
-            a_score = float(np.trace(st.sigma) / st.weight_shape[1])   # mean eig(A), = L1's score
-            g_score = float(st.trace_g / st.weight_shape[0])           # mean eig(G)
-            return a_score * g_score
-        if self.rung == "L4":                       # near-true Hessian via HVP
-            return _hvp_trace_estimate(st)
+            g_bar = st.g_bar
+            return np.clip(np.diag(S), 1e-12, None) * float(g_bar)
+
+        if self.rung == "L4":
+            # Near-true Hessian: per-coordinate Hutchinson DIAGONAL via HVP,
+            # with a Rademacher contraction over output channels.
+            # Raises RuntimeError if hvp not attached.
+            return _hvp_diag_estimate(st)
+
         raise ValueError(self.rung)
 
     def allocate(self, stats, budget):
-        score = {l: self._sensitivity(st) for l, st in stats.items()}
+        # Reduce the per-coordinate vector to a layer score for water-filling.
+        # The reduction is shared across rungs, so any difference between rungs
+        # comes from their STRUCTURE, not from the summary.
+        score = {l: float(np.mean(self._sensitivity_vec(st)))
+                 for l, st in stats.items()}
         bits = _waterfill(score, stats, budget)
         return AllocationMap(bits, self.name, budget, meta={"rung": self.rung})
 
@@ -144,6 +192,7 @@ class LadderAdapter:
 
     def native_run(self, weights, budget):
         return None
+
 
 
 # ======================================================================
@@ -283,20 +332,88 @@ def _waterfill(score: dict[str, float], stats: dict[str, dict], budget: float,
     return {l: float(b) for l, b in zip(layers, bits)}
 
 
-def _hvp_trace_estimate(st: LayerStats, n_probe: int = 50, seed: int = 0) -> float:
-    """Hutchinson trace estimate of the near-true Hessian via the HVP action,
-    rescaled to match L1's convention (unscaled trace(Sigma)/d_in)."""
-    if st.hvp is None:
-        raise ValueError(
-            f"L4 requires hvp on layer '{st.layer_id}', but it is None. "
-            f"Call stage0.hvp.attach_hvp(stats, model, input_ids, device) "
-            f"on this LayerStats dict before allocating with rung L4."
-        )
+
+
+
+def _hvp_diag_estimate(st: LayerStats, n_probe: int = 64,
+                       rng: Optional[np.random.Generator] = None) -> Array:
+    """Hutchinson DIAGONAL estimate of the near-true Hessian via the HVP action.
+
+        Returns a length-d_in vector: diag(H) ~= E[ v * (H v) ] with Rademacher v,
+        since E[v_i v_j] = delta_ij.
+
+        Raises RuntimeError if hvp is not attached or doesn't accept (v, u) signature.
+    """
     n = st.weight_shape[1]
-    rng = np.random.default_rng(seed)
-    acc = 0.0
+    if st.hvp is None:
+        raise RuntimeError(
+            f"Layer {st.layer_id}: hvp not attached. "
+            f"Cannot compute L4 without HVP. Attach via attach_hvp() first."
+        )
+
+    rng = rng or np.random.default_rng()
+    d_out = st.weight_shape[0]
+    acc = np.zeros(n)
     for _ in range(n_probe):
-        v = rng.choice([-1.0, 1.0], size=n)
-        acc += float(v @ st.hvp(v))
-    raw = acc / (n_probe * n)
-    return max(raw / st.n_tokens, 1e-8)
+        v = rng.choice([-1.0, 1.0], size=n)          # input-space probe
+        u = rng.choice([-1.0, 1.0], size=d_out)      # OUTPUT-space Rademacher
+        try:
+            Hv = st.hvp(v, u)          # preferred signature: contracts with u
+        except TypeError as e:
+            raise RuntimeError(
+            f"Layer {st.layer_id}: hvp must accept (v, u) signature "
+            f"for correct output-side Rademacher contraction. Got: {e}"
+        )
+                       # legacy: all-ones broadcast (BIASED)
+        acc += v * np.asarray(Hv).ravel()[:n]
+    return np.clip(acc / n_probe, 1e-12, None)
+
+
+# ----------------------------------------------------------------------
+# GUARD: named-distinct estimators must compute distinct values
+# ----------------------------------------------------------------------
+def assert_rungs_discriminate(stats: dict[str, LayerStats],
+                              rungs=("L0", "L1", "L2", "L3", "L4"),
+                              tol: float = 1e-9) -> dict:
+    """Two names computing one number is a DEFECT, not a finding.
+
+    Run this at harness startup. It would have caught L0 == L1 == L3 the first
+    time the ladder ran. Raises on collapse; returns the pairwise distances.
+    """
+    import itertools
+    vecs = {r: {l: LadderAdapter(r)._sensitivity_vec(st)
+                for l, st in stats.items()} for r in rungs}
+    report, collapsed = {}, []
+    for a, b in itertools.combinations(rungs, 2):
+        d = max(float(np.max(np.abs(vecs[a][l] - vecs[b][l])))
+                for l in stats)
+        report[f"{a}_vs_{b}"] = d
+        if d <= tol:
+            collapsed.append((a, b))
+    if collapsed:
+        raise AssertionError(
+            "LADDER COLLAPSE -- these rungs compute identical sensitivities and "
+            f"are therefore ONE estimator under several names: {collapsed}. "
+            "Any 'ladder-dependence' result from this configuration is invalid.")
+    return report
+
+
+
+
+# def _hvp_trace_estimate(st: LayerStats, n_probe: int = 50, seed: int = 0) -> float:
+#     """Hutchinson trace estimate of the near-true Hessian via the HVP action,
+#     rescaled to match L1's convention (unscaled trace(Sigma)/d_in)."""
+#     if st.hvp is None:
+#         raise ValueError(
+#             f"L4 requires hvp on layer '{st.layer_id}', but it is None. "
+#             f"Call stage0.hvp.attach_hvp(stats, model, input_ids, device) "
+#             f"on this LayerStats dict before allocating with rung L4."
+#         )
+#     n = st.weight_shape[1]
+#     rng = np.random.default_rng(seed)
+#     acc = 0.0
+#     for _ in range(n_probe):
+#         v = rng.choice([-1.0, 1.0], size=n)
+#         acc += float(v @ st.hvp(v))
+#     raw = acc / (n_probe * n)
+#     return max(raw / st.n_tokens, 1e-8)

@@ -86,7 +86,7 @@ def main():
 
             print("[2/4] Attaching L4 HVP...")
             attach_hvp(stats, model, input_ids, CFG['device'],
-                       n_batches=10, batch_size=2)
+                       n_batches=20, batch_size=2)
 
             print("[3/4] Attaching L3 trace(G)...")
             attach_kfac_trace(stats, model, input_ids, CFG['device'],
