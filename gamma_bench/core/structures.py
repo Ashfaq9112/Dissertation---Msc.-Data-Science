@@ -117,14 +117,29 @@ class Quantizer(Protocol):
 
 class UniformGridQuantizer:
     """Reference symmetric per-tensor uniform quantizer to `bits` levels."""
+    # def apply(self, weights, alloc):
+    #     out = {}
+    #     for layer_id, W in weights.items():
+    #         b = alloc.bits[layer_id]
+    #         levels = max(2, int(round(2 ** b)))
+    #         scale = np.max(np.abs(W)) / (levels / 2 - 1 + 1e-12)
+    #         q = np.clip(np.round(W / (scale + 1e-12)), -(levels//2), levels//2 - 1)
+    #         out[layer_id] = q * scale
+    #     return out
     def apply(self, weights, alloc):
         out = {}
         for layer_id, W in weights.items():
             b = alloc.bits[layer_id]
             levels = max(2, int(round(2 ** b)))
-            scale = np.max(np.abs(W)) / (levels / 2 - 1 + 1e-12)
-            q = np.clip(np.round(W / (scale + 1e-12)), -(levels//2), levels//2 - 1)
-            out[layer_id] = q * scale
+            if levels == 2:
+                # Binary quantization: {-1, +1} × scale
+                scale = np.mean(np.abs(W))
+                out[layer_id] = np.where(W >= 0, scale, -scale)
+            else:
+                qmax = levels // 2 - 1
+                scale = np.max(np.abs(W)) / (qmax + 1e-12)
+                q = np.clip(np.round(W / (scale + 1e-12)), -qmax - 1, qmax)
+                out[layer_id] = q * scale
         return out
 
 

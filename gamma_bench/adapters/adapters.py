@@ -66,12 +66,14 @@ class GammaFieldAdapter:
         # use_geometry_terms=False is the geometry-term ablation (Stage 2):
         # drops kappa_gen / lambda_CL / C(x), leaving only lambda_geo.
         self.use_geometry_terms = use_geometry_terms
+
         self.name = name
 
     def _lambda_geo(self, st: LayerStats) -> float:
-        """Geometric-mean eigenvalue = basis-invariant volume statistic.
-        In the real system this calls the SVD-free Gamma_prac estimator."""
-        return float(np.exp(np.mean(np.log(st.spectrum()))))
+    
+        return float(np.exp(np.mean(np.log(st.spectrum())))
+       
+        
 
     def _geometry_modulation(self, st: LayerStats) -> float:
         """Hook point for kappa_gen / lambda_CL / C(x). Stubbed to 1.0 here;
@@ -177,13 +179,16 @@ class LadderAdapter:
             return _hvp_diag_estimate(st)
 
         raise ValueError(self.rung)
+    def _reduce_to_scalar(self, vec: Array) -> float:
+        """Discrimination-preserving reduction: vector -> layer scalar via mean."""
+        return float(np.mean(vec))
 
     def allocate(self, stats, budget):
-        # Reduce the per-coordinate vector to a layer score for water-filling.
-        # The reduction is shared across rungs, so any difference between rungs
-        # comes from their STRUCTURE, not from the summary.
-        score = {l: float(np.mean(self._sensitivity_vec(st)))
-                 for l, st in stats.items()}
+        # Step 1: compute and STORE the full per-coordinate vectors.
+        vecs = {l: self._sensitivity_vec(st) for l, st in stats.items()}
+    
+        # Step 2: reduce each vector to a layer scalar for water-filling.
+        score = {l: self._reduce_to_scalar(v) for l, v in vecs.items()}
         bits = _waterfill(score, stats, budget)
         return AllocationMap(bits, self.name, budget, meta={"rung": self.rung})
 
@@ -287,7 +292,7 @@ class ReusedPTQAdapter:
 #     return {l: float(b) for l, b in zip(layers, bits)}
 
 def _waterfill(score: dict[str, float], stats: dict[str, dict], budget: float,
-                bmin: float = 2.0, bmax: float = 8.0,
+                bmin: float = 1.0, bmax: float = 8.0,
                 max_iter: int = 50) -> dict[str, float]:
     """Reverse water-filling bit allocation.
 
