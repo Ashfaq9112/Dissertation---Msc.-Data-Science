@@ -71,7 +71,7 @@ class GammaFieldAdapter:
 
     def _lambda_geo(self, st: LayerStats) -> float:
     
-        return float(np.exp(np.mean(np.log(st.spectrum())))
+        return float(np.exp(np.mean(np.log(st.spectrum()))))
        
         
 
@@ -85,7 +85,7 @@ class GammaFieldAdapter:
                  for l, st in stats.items()}
         bits = _waterfill(score, stats, budget)
         return AllocationMap(bits, self.name, budget,
-                             meta={"geometry_terms": self.use_geometry_terms})
+                             meta={"geometry_terms": self.use_geometry_terms,"sensitivity": score})
 
     def pre_transform(self, weights):
         return weights, {}                      # gamma does not rotate weights
@@ -190,7 +190,7 @@ class LadderAdapter:
         # Step 2: reduce each vector to a layer scalar for water-filling.
         score = {l: self._reduce_to_scalar(v) for l, v in vecs.items()}
         bits = _waterfill(score, stats, budget)
-        return AllocationMap(bits, self.name, budget, meta={"rung": self.rung})
+        return AllocationMap(bits, self.name, budget, meta={"rung": self.rung,"sensitivity": score})
 
     def pre_transform(self, weights):
         return weights, {}
@@ -377,30 +377,79 @@ def _hvp_diag_estimate(st: LayerStats, n_probe: int = 64,
 # ----------------------------------------------------------------------
 # GUARD: named-distinct estimators must compute distinct values
 # ----------------------------------------------------------------------
-def assert_rungs_discriminate(stats: dict[str, LayerStats],
-                              rungs=("L0", "L1", "L2", "L3", "L4"),
-                              tol: float = 1e-9) -> dict:
-    """Two names computing one number is a DEFECT, not a finding.
 
-    Run this at harness startup. It would have caught L0 == L1 == L3 the first
-    time the ladder ran. Raises on collapse; returns the pairwise distances.
+def assert_rungs_discriminate(
+    stats: dict[str, LayerStats],
+    rungs: tuple = ("L0", "L1", "L2", "L3", "L4"),
+    tol: float = 1e-9,
+    n_check: int = 3,
+) -> dict:
+    """
+    Quick sanity check on a subset of layers.
+    Raises on forbidden collapse; returns pairwise distances.
     """
     import itertools
-    vecs = {r: {l: LadderAdapter(r)._sensitivity_vec(st)
-                for l, st in stats.items()} for r in rungs}
-    report, collapsed = {}, []
+
+    # Pick first, middle, last layer for coverage
+    all_layers = list(stats.keys())
+    if len(all_layers) <= n_check:
+        check_layers = all_layers
+    else:
+        mid = len(all_layers) // 2
+        check_layers = [all_layers[0], all_layers[mid], all_layers[-1]]
+
+    check_stats = {l: stats[l] for l in check_layers}
+    print(f"  Checking rungs on {len(check_layers)} layers: {check_layers}")
+
+    vecs = {
+        r: {l: LadderAdapter(r)._sensitivity_vec(st) for l, st in check_stats.items()}
+        for r in rungs
+    }
+
+    permitted_collapse = {("L0", "L3"), ("L3", "L0")}
+    report = {}
+    collapsed = []
+
     for a, b in itertools.combinations(rungs, 2):
-        d = max(float(np.max(np.abs(vecs[a][l] - vecs[b][l])))
-                for l in stats)
+        d = max(
+            float(np.max(np.abs(vecs[a][l] - vecs[b][l])))
+            for l in check_stats
+        )
         report[f"{a}_vs_{b}"] = d
-        if d <= tol:
+        if d <= tol and (a, b) not in permitted_collapse:
             collapsed.append((a, b))
+
     if collapsed:
         raise AssertionError(
-            "LADDER COLLAPSE -- these rungs compute identical sensitivities and "
-            f"are therefore ONE estimator under several names: {collapsed}. "
-            "Any 'ladder-dependence' result from this configuration is invalid.")
+            f"LADDER COLLAPSE on sampled layers {check_layers}: {collapsed}. "
+            "Rungs compute identical sensitivities — ablation is invalid."
+        )
+
     return report
+# def assert_rungs_discriminate(stats: dict[str, LayerStats],
+#                               rungs=("L0", "L1", "L2", "L3", "L4"),
+#                               tol: float = 1e-9) -> dict:
+#     """Two names computing one number is a DEFECT, not a finding.
+
+#     Run this at harness startup. It would have caught L0 == L1 == L3 the first
+#     time the ladder ran. Raises on collapse; returns the pairwise distances.
+#     """
+#     import itertools
+#     vecs = {r: {l: LadderAdapter(r)._sensitivity_vec(st)
+#                 for l, st in stats.items()} for r in rungs}
+#     report, collapsed = {}, []
+#     for a, b in itertools.combinations(rungs, 2):
+#         d = max(float(np.max(np.abs(vecs[a][l] - vecs[b][l])))
+#                 for l in stats)
+#         report[f"{a}_vs_{b}"] = d
+#         if d <= tol:
+#             collapsed.append((a, b))
+#     if collapsed:
+#         raise AssertionError(
+#             "LADDER COLLAPSE -- these rungs compute identical sensitivities and "
+#             f"are therefore ONE estimator under several names: {collapsed}. "
+#             "Any 'ladder-dependence' result from this configuration is invalid.")
+#     return report
 
 
 

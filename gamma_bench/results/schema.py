@@ -91,6 +91,7 @@ class RunRecord:
     operator: OperatorMetrics = field(default_factory=OperatorMetrics)
     hessian_probe: HessianLadderProbe = field(default_factory=HessianLadderProbe)
     alloc_bits: dict[str, float] = field(default_factory=dict)
+    sensitivity_scores: dict[str, float] = field(default_factory=dict)
     meta: dict = field(default_factory=dict)
     timestamp: str = field(
         default_factory=lambda: datetime.datetime.utcnow().isoformat())
